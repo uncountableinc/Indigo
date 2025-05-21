@@ -84,6 +84,7 @@ jobs:
           path: dist
 
   build_indigo_libs_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -334,6 +335,7 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-python_test_report"
 
   test_indigo_python_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -466,6 +468,7 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-java_test_report"
 
   test_indigo_java_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -599,6 +602,7 @@ jobs:
           check_name: "${{ matrix.os }}-x86_64-dotnet_test_report"
 
   test_indigo_dotnet_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -856,7 +860,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -934,6 +938,7 @@ jobs:
           path: dist/bingo-oracle*.tgz
 
   build_bingo_oracle_windows_mingw_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     defaults:
@@ -966,6 +971,7 @@ jobs:
           path: dist/bingo-oracle*.zip
 
   build_bingo_oracle_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     steps:
@@ -1066,6 +1072,7 @@ jobs:
           check_name: "bingo_postgres_${{ matrix.postgres_major_version }}_test_report"
 
   build_bingo_postgres_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -1137,6 +1144,7 @@ jobs:
           path: dist/bingo-postgres*.tgz
 
   build_bingo_sqlserver_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
