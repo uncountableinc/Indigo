@@ -211,6 +211,18 @@ namespace indigo
         RepeatingUnit(const RepeatingUnit&);
     };
 
+    class DLLEXPORT CopolymerGroup : public SGroup
+    {
+    public:
+        CopolymerGroup();
+        ~CopolymerGroup() override;
+
+        int connectivity;
+
+    private:
+        CopolymerGroup(const CopolymerGroup&);
+    };
+
     class DLLEXPORT MultipleGroup : public SGroup
     {
     public:
