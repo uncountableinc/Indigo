@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -78,12 +78,13 @@ jobs:
           cmake --build . --config Release --target ALL_BUILD
           ctest --verbose -C Release
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-libs-${{ fromJSON(env.OS_NAME_MAPPING_JSON)[matrix.os] }}-x86_64
           path: dist
 
   build_indigo_libs_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +110,7 @@ jobs:
           cmake --build . --config Release --target ALL_BUILD
           ctest --verbose -C Release
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-libs-${{ fromJSON(env.OS_NAME_MAPPING_JSON)[matrix.os] }}-i386
           path: dist
@@ -152,7 +153,7 @@ jobs:
           cmake --build . --config Release --target all -- -j $(sysctl -n hw.logicalcpu)
           # ctest --verbose  # NOTE: We can't run tests until we have native ARM64 node
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-libs-${{ fromJSON(env.OS_NAME_MAPPING_JSON)[matrix.os] }}-aarch64
           path: dist
@@ -161,9 +162,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wrapper: [ python, java, dotnet ]
+        wrapper: [ python ]
     runs-on: ubuntu-latest
-    needs: [ build_indigo_libs_x86_64, build_indigo_libs_aarch64, build_indigo_libs_i386 ]
+    needs: [ build_indigo_libs_x86_64, build_indigo_libs_aarch64 ]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -178,32 +179,32 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download Linux native libs x86_64
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-libs-linux-x86_64
           path: dist/
       - name: Download Linux native libs aarch64
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-libs-linux-aarch64
           path: dist/
-      - name: Download Windows native libs x86_64
-        uses: actions/download-artifact@v3
-        with:
-          name: indigo-libs-windows-x86_64
-          path: dist/
-      - name: Download Windows native libs i386
-        uses: actions/download-artifact@v3
-        with:
-          name: indigo-libs-windows-i386
-          path: dist/
+      # - name: Download Windows native libs x86_64
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-x86_64
+      #     path: dist/
+      # - name: Download Windows native libs i386
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-i386
+      #     path: dist/
       - name: Download macOS native libs x86_64
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-libs-macos-x86_64
           path: dist/
       - name: Download macOS native libs aarch64
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-libs-macos-aarch64
           path: dist/
@@ -216,27 +217,27 @@ jobs:
           cmake .. -DBUILD_INDIGO=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF
           cmake --build . --config Release --target indigo-${{ matrix.wrapper }}
       - name: Upload native shared libs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-native-shared-libs
           path: |
             dist/lib
       - name: Upload Python wrappers
         if: ${{ matrix.wrapper == 'python' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-python
           path: |
             dist/*.whl
       - name: Upload Java wrappers
         if: ${{ matrix.wrapper == 'java' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-java
           path: dist/*.jar
       - name: Upload .NET wrappers
         if: ${{ matrix.wrapper == 'dotnet' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-dotnet
           path: dist/*.nupkg
@@ -246,7 +247,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: build_indigo_wrappers
     steps:
@@ -262,7 +263,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: dist/
@@ -308,7 +309,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: dist/
@@ -334,6 +335,7 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-python_test_report"
 
   test_indigo_python_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -354,7 +356,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: dist/
@@ -399,7 +401,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-java
           path: dist/
@@ -440,7 +442,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-java
           path: dist/
@@ -466,6 +468,7 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-java_test_report"
 
   test_indigo_java_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -486,7 +489,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-java
           path: dist/
@@ -533,7 +536,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-dotnet
           path: dist/
@@ -599,6 +602,7 @@ jobs:
           check_name: "${{ matrix.os }}-x86_64-dotnet_test_report"
 
   test_indigo_dotnet_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -619,7 +623,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-dotnet
           path: dist/
@@ -668,7 +672,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir dist
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: dist/
@@ -695,7 +699,7 @@ jobs:
         run: pytest tests
         working-directory: bingo/bingo-elastic/python
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-elastic-python
           path: dist
@@ -724,7 +728,7 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-java
           path: dist/
@@ -783,7 +787,7 @@ jobs:
 #          github_token: ${{ secrets.GITHUB_TOKEN }}
 #          check_name: "windows-mingw_python_test_report"
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-libs-windows-mingw-x86_64
           path: dist
@@ -815,7 +819,7 @@ jobs:
           emcmake cmake .. -DCMAKE_BUILD_TYPE=Release
           cmake --build . --config Release --target indigo-ketcher-package -- -j $(nproc)
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-ketcher
           path: dist/indigo-ketcher*.tgz
@@ -847,7 +851,7 @@ jobs:
           emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -DRENDER_ENABLE_CJK=ON
           cmake --build . --config Release --target indigo-ketcher-package -- -j $(nproc)
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-ketcher-cjk
           path: dist/indigo-ketcher*.tgz
@@ -856,7 +860,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -898,7 +902,7 @@ jobs:
           cmake --build . --config Release --target ALL_BUILD
           ctest --verbose -C Release
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: indigo-utils-${{ fromJSON(env.OS_NAME_MAPPING_JSON)[matrix.os] }}-x86_64
           path: dist/utils
@@ -928,12 +932,13 @@ jobs:
             cmake --build . --config Release --target package-bingo-oracle -- -j $(nproc)
             "
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-oracle-linux-x86_64
           path: dist/bingo-oracle*.tgz
 
   build_bingo_oracle_windows_mingw_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     defaults:
@@ -960,12 +965,13 @@ jobs:
           cmake .. -G "MinGW Makefiles" -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
           cmake --build . --config Release --target package-bingo-oracle -- -j $(nproc)
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-oracle-windows-mingw-x86_64
           path: dist/bingo-oracle*.zip
 
   build_bingo_oracle_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     steps:
@@ -985,7 +991,7 @@ jobs:
           cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
           cmake --build . --config Release --target package-bingo-oracle
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-oracle-windows-msvc-x86_64
           path: dist/bingo-oracle*.zip
@@ -1030,7 +1036,7 @@ jobs:
             cmake --build . --config Release --target package-bingo-postgres -- -j $(nproc)
             "
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-postgres-${{ matrix.postgres_major_version }}-linux-x86_64
           path: dist/bingo-postgres*.tgz
@@ -1066,6 +1072,7 @@ jobs:
           check_name: "bingo_postgres_${{ matrix.postgres_major_version }}_test_report"
 
   build_bingo_postgres_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -1096,7 +1103,7 @@ jobs:
           cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(resolve-path $pwd/../pgsql)"
           cmake --build . --config Release --target package-bingo-postgres
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-postgres-${{ matrix.postgres_major_version }}-windows-x86_64
           path: dist/bingo-postgres*.zip
@@ -1131,12 +1138,13 @@ jobs:
           cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(dirname $PWD)/pgsql" -DPostgreSQL_ADDITIONAL_VERSIONS=${{ matrix.postgres_major_version }}
           cmake --build . --config Release --target package-bingo-postgres
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-postgres-${{ matrix.postgres_major_version }}-macos-x86_64
           path: dist/bingo-postgres*.tgz
 
   build_bingo_sqlserver_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -1160,7 +1168,7 @@ jobs:
           cmake .. -DBUILD_BINGO_SQLSERVER=ON -DBUILD_BINGO_POSTGRES=OFF -DBUILD_BINGO_ORACLE=OFF  -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
           cmake --build . --config Release --target package-bingo-sqlserver
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bingo-sqlserver-${{ matrix.os }}-x86_64
           path: dist/bingo-sqlserver*.zip
@@ -1168,7 +1176,7 @@ jobs:
   publish_indigo_to_pypi:
     if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1183,17 +1191,17 @@ jobs:
       - name: Create folder for native libs
         run: mkdir -p dist/lib
       - name: Download native shared libraries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-native-shared-libs
           path: dist/lib
       - name: Download Python wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: dist/
       - name: Download bingo-elastic-python
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bingo-elastic-python
           path: dist/
@@ -1206,7 +1214,7 @@ jobs:
   publish_indigo_to_nuget:
     if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1221,12 +1229,12 @@ jobs:
       - name: Create folder for native libs
         run: mkdir -p dist/lib
       - name: Download native shared libraries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-native-shared-libs
           path: dist/lib
       - name: Download .NET nupkg
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-dotnet
           path: dist/
@@ -1238,7 +1246,7 @@ jobs:
   publish_indigo_to_npm:
     if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1253,12 +1261,12 @@ jobs:
       - name: Create folder for native libs
         run: mkdir -p dist/lib
       - name: Download native shared libraries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-native-shared-libs
           path: dist/lib
       - name: Download indigo-ketcher NPM package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-ketcher
           path: dist/
@@ -1275,7 +1283,7 @@ jobs:
   publish_indigo_to_maven:
     if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1290,7 +1298,7 @@ jobs:
       - name: Create folder for native libs
         run: mkdir -p dist/lib
       - name: Download native shared libraries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-native-shared-libs
           path: dist/lib
@@ -1330,7 +1338,7 @@ jobs:
              git config --global --add safe.directory '*'
              git fetch --tags -f
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: utils/indigo-service/backend/lib/
@@ -1387,7 +1395,7 @@ jobs:
              git config --global --add safe.directory '*'
              git fetch --tags -f
       - name: Download wrappers
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: indigo-python
           path: api/http/
