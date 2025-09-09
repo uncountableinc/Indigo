@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -84,6 +84,7 @@ jobs:
           path: dist
 
   build_indigo_libs_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -161,9 +162,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wrapper: [ python, java, dotnet ]
+        wrapper: [ python ]
     runs-on: ubuntu-latest
-    needs: [ build_indigo_libs_x86_64, build_indigo_libs_aarch64, build_indigo_libs_i386 ]
+    needs: [ build_indigo_libs_x86_64, build_indigo_libs_aarch64 ]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -187,16 +188,16 @@ jobs:
         with:
           name: indigo-libs-linux-aarch64
           path: dist/
-      - name: Download Windows native libs x86_64
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-x86_64
-          path: dist/
-      - name: Download Windows native libs i386
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-i386
-          path: dist/
+      # - name: Download Windows native libs x86_64
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-x86_64
+      #     path: dist/
+      # - name: Download Windows native libs i386
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-i386
+      #     path: dist/
       - name: Download macOS native libs x86_64
         uses: actions/download-artifact@v4
         with:
@@ -218,7 +219,7 @@ jobs:
       - name: Upload native shared libs
         uses: actions/upload-artifact@v4
         with:
-          name: indigo-native-shared-libs-${{ matrix.wrapper }}
+          name: indigo-native-shared-libs
           path: |
             dist/lib
       - name: Upload Python wrappers
@@ -241,24 +242,14 @@ jobs:
           name: indigo-dotnet
           path: dist/*.nupkg
 
-  merge_indigo_wrappers:
-    runs-on: ubuntu-latest
-    needs: build_indigo_wrappers
-    steps:
-      - name: Merge native shared libs
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: indigo-native-shared-libs
-          pattern: indigo-native-shared-libs-*
-
   test_indigo_python_x86_64:
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -291,7 +282,7 @@ jobs:
         run: python3 -Wignore api/tests/integration/test.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -304,7 +295,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -337,23 +328,24 @@ jobs:
             python3 api/tests/integration/test.py -p basic/basic.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           check_name: "${{ matrix.os }}-aarch64-python_test_report"
 
   test_indigo_python_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [ windows-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           lfs: false
           fetch-depth: 500
@@ -382,7 +374,7 @@ jobs:
         run: python api/tests/integration/test.py -t 1 -p basic/basic.py -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -395,7 +387,7 @@ jobs:
       matrix:
         os: [ macos-13, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -423,7 +415,7 @@ jobs:
           java -Xss4m -jar jython.jar api/tests/integration/test.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -436,7 +428,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -469,20 +461,21 @@ jobs:
             java -Xss4m -jar jython.jar api/tests/integration/test.py -p basic/basic.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           check_name: "${{ matrix.os }}-aarch64-java_test_report"
 
   test_indigo_java_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [ windows-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -515,7 +508,7 @@ jobs:
           java -Xss4m -jar jython.jar api/tests/integration/test.py -t 1 -p basic/basic.py -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -529,7 +522,7 @@ jobs:
         # os: [ macos-13, ubuntu-latest, windows-latest ]
         os: [ macos-13, windows-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -602,20 +595,21 @@ jobs:
         run: ./IronPython/net462/ipy.exe api/tests/integration/test.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           check_name: "${{ matrix.os }}-x86_64-dotnet_test_report"
 
   test_indigo_dotnet_i386:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [ windows-latest ]
     runs-on: ${{ matrix.os }}
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -654,7 +648,7 @@ jobs:
         run: ./IronPython/net462/ipy32.exe api/tests/integration/test.py -t 1 -p basic/basic.py -j junit_report.xml
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -666,7 +660,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [ '3.9', '3.10' ]
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -707,18 +701,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bingo-elastic-python-${{ matrix.python-version }}
-          path: dist
-
-  merge_bingo_elastic_python_linux_x86_64:
-    runs-on: ubuntu-latest
-    needs: [ test_bingo_elastic_python_linux_x86_64 ]
-    steps:
-      - name: Merge artifacts
-        uses: actions/upload-artifact/merge@v4
-        with:
           name: bingo-elastic-python
-          pattern: bingo-elastic-python-*
+          path: dist
 
   test_bingo_elastic_java_linux_x86_64:
     strategy:
@@ -726,7 +710,7 @@ jobs:
       matrix:
         java-version: [ 1.8, 1.11 ]
     runs-on: ubuntu-latest
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -797,7 +781,7 @@ jobs:
 #          python api/tests/integration/test.py -t 1 -j junit_report.xml -platform mingw
 #      - name: Publish Test Report
 #        if: always()
-#        uses: mikepenz/action-junit-report@v4
+#        uses: mikepenz/action-junit-report@v3
 #        with:
 #          report_paths: 'junit_report.xml'
 #          github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -876,7 +860,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-13, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -954,6 +938,7 @@ jobs:
           path: dist/bingo-oracle*.tgz
 
   build_bingo_oracle_windows_mingw_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     defaults:
@@ -986,6 +971,7 @@ jobs:
           path: dist/bingo-oracle*.zip
 
   build_bingo_oracle_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: windows-latest
     needs: static_analysis
     steps:
@@ -1074,18 +1060,19 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Publish Docker images
-        if: startsWith(github.ref, 'refs/tags/indigo-')
-        run: docker push epmlsop/bingo-postgres:${{ matrix.postgres_major_version }}-latest
+      # - name: Publish Docker images
+      #   if: startsWith(github.ref, 'refs/tags/indigo-')
+      #   run: docker push epmlsop/bingo-postgres:${{ matrix.postgres_major_version }}-latest
       - name: Publish Test Report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v3
         with:
           report_paths: 'bingo/tests/junit_report.xml'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           check_name: "bingo_postgres_${{ matrix.postgres_major_version }}_test_report"
 
   build_bingo_postgres_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -1157,6 +1144,7 @@ jobs:
           path: dist/bingo-postgres*.tgz
 
   build_bingo_sqlserver_windows_msvc_x86_64:
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     strategy:
       fail-fast: false
       matrix:
@@ -1186,9 +1174,9 @@ jobs:
           path: dist/bingo-sqlserver*.zip
 
   publish_indigo_to_pypi:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1224,9 +1212,9 @@ jobs:
              twine upload -u __token__ -p ${PYPI_TOKEN} --skip-existing dist/*.whl
 
   publish_indigo_to_nuget:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1256,9 +1244,9 @@ jobs:
         run: dotnet nuget push dist/*.nupkg --api-key ${NUGET_API_KEY} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
   publish_indigo_to_npm:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1293,9 +1281,9 @@ jobs:
           bash .ci/publish_npm.sh
 
   publish_indigo_to_maven:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    if: ${{ false }} # startsWith(github.ref, 'refs/tags/indigo-')
     runs-on: ubuntu-latest
-    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
+    needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, test_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -1338,7 +1326,7 @@ jobs:
   build_test_publish_indigo_service_old:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1395,7 +1383,7 @@ jobs:
   build_test_publish_indigo_service_new:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: merge_indigo_wrappers
+    needs: build_indigo_wrappers
     steps:
       - name: Checkout
         uses: actions/checkout@v4
