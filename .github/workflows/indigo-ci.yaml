@@ -196,16 +196,16 @@ jobs:
         with:
           name: indigo-libs-linux-aarch64
           path: dist/
-      - name: Download Windows native libs x86_64
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-x86_64
-          path: dist/
-      - name: Download Windows native libs i386
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-i386
-          path: dist/
+      # - name: Download Windows native libs x86_64
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-x86_64
+      #     path: dist/
+      # - name: Download Windows native libs i386
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-i386
+      #     path: dist/
       - name: Download macOS native libs x86_64
         uses: actions/download-artifact@v4
         with:
@@ -219,7 +219,7 @@ jobs:
       - name: Install Python test dependencies
         run: python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
       - name: Build wrappers
-        if: ${{ startsWith(matrix.os, 'macos') }}
+        # if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
           mkdir build
           cd build
