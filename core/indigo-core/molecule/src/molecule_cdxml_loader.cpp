@@ -675,12 +675,29 @@ void MoleculeCdxmlLoader::_parseCDXMLElements(BaseCDXElement& first_elem, bool n
             this->_parseCDXMLElements(*elem.firstChildElement(), false, true);
             auto inner_idx_end = nodes.size();
             CdxmlNode& fragment_node = nodes[inner_idx_start - 1];
+            // Compute centroid of inner atom positions
+            Vec3f centroid(0, 0, 0);
+            int inner_count = 0;
+            for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+            {
+                centroid.add(nodes[i].pos);
+                ++inner_count;
+            }
+            if (inner_count > 0)
+                centroid.scale(1.0f / inner_count);
+
+            // Translate inner atoms so centroid maps to fragment node's page position
+            Vec3f offset;
+            offset.diff(fragment_node.pos, centroid); // offset = fragment_node.pos - centroid
+
             for (auto i = inner_idx_start; i < inner_idx_end; ++i)
             {
                 auto it = std::upper_bound(fragment_node.inner_nodes.cbegin(), fragment_node.inner_nodes.cend(), fragment_node.id,
                                            [](int a, int b) { return a > b; });
-                if (nodes[i].pos.x == 0 && nodes[i].pos.y == 0 && nodes[i].pos.z == 0) // if no coord - copy from parent
-                    nodes[i].pos = fragment_node.pos;
+                if (nodes[i].pos.x == 0 && nodes[i].pos.y == 0 && nodes[i].pos.z == 0)
+                    nodes[i].pos = fragment_node.pos; // no coords at all — fallback unchanged
+                else
+                    nodes[i].pos.add(offset); // translate stale absolute coords to page space
                 fragment_node.inner_nodes.insert(it, nodes[i].id);
             }
         }
