@@ -1021,6 +1021,28 @@ void MolfileLoader::_readCtab2000()
 
                 _scanner.skipLine();
             }
+            else if (strncmp(chars, "SST", 3) == 0)
+            {
+                int n = _scanner.readIntFix(3);
+
+                while (n-- > 0)
+                {
+                    _scanner.skip(1);
+                    char type[4] = {0, 0, 0, 0};
+                    int sgroup_idx = _scanner.readIntFix(3) - 1;
+                    _scanner.skip(1);
+                    _scanner.readCharsFix(3, type);
+                    int idx = _sgroup_mapping[sgroup_idx];
+                    SGroup* sgroup = &_bmol->sgroups.getSGroup(idx);
+                    if (strcmp(type, "ALT") == 0)
+                        sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_ALT;
+                    else if (strcmp(type, "RAN") == 0)
+                        sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_RAN;
+                    else if (strcmp(type, "BLO") == 0)
+                        sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_BLO;
+                }
+                _scanner.skipLine();
+            }
             else if (strncmp(chars, "STY", 3) == 0)
             {
                 int n = _scanner.readIntFix(3);
@@ -1290,6 +1312,18 @@ void MolfileLoader::_readCtab2000()
                     RepeatingUnit& sru = (RepeatingUnit&)_bmol->sgroups.getSGroup(_sgroup_mapping[sgroup_idx]);
                     _scanner.readLine(sru.subscript, true);
                 }
+                else if (_sgroup_types[sgroup_idx] == SGroup::SG_TYPE_MIX)
+                {
+                    _scanner.skip(1);
+                    MixtureGroup& mg = (MixtureGroup&)_bmol->sgroups.getSGroup(_sgroup_mapping[sgroup_idx]);
+                    _scanner.readLine(mg.subscript, true);
+                }
+                else if (_sgroup_types[sgroup_idx] == SGroup::SG_TYPE_COM)
+                {
+                    _scanner.skip(1);
+                    ComponentGroup& cg = (ComponentGroup&)_bmol->sgroups.getSGroup(_sgroup_mapping[sgroup_idx]);
+                    _scanner.readLine(cg.subscript, true);
+                }
                 else
                     _scanner.skipLine();
             }
@@ -1427,6 +1461,39 @@ void MolfileLoader::_readCtab2000()
                         else
                             // In some molfiles last space is not written
                             need_skip_line = false;
+                    }
+                }
+                if (need_skip_line)
+                    _scanner.skipLine();
+            }
+            else if (strncmp(chars, "SNC", 3) == 0)
+            {
+                // The format is the following: M SNCnn8 sss ooo ...
+                int n = _scanner.readIntFix(3);
+
+                bool need_skip_line = true;
+                while (n-- > 0)
+                {
+                    _scanner.skip(1);
+                    int sgroup_idx = _scanner.readIntFix(3) - 1;
+
+                    char id[4];
+                    _scanner.skip(1);
+                    _scanner.readCharsFix(3, id);
+
+                    if (_sgroup_types[sgroup_idx] == SGroup::SG_TYPE_COM)
+                    {
+                        ComponentGroup& cg = (ComponentGroup&)_bmol->sgroups.getSGroup(_sgroup_mapping[sgroup_idx]);
+                        cg.component_count = _scanner.readIntFix(3);
+
+                        if (id[2] == '\n')
+                        {
+                            if (n != 0)
+                                throw Error("Unexpected end of M SNC");
+                            else
+                                // In some molfiles last space is not written
+                                need_skip_line = false;
+                        }
                     }
                 }
                 if (need_skip_line)
@@ -3435,13 +3502,18 @@ void MolfileLoader::_readSGroup3000(const char* str)
     DataSGroup* dsg = 0;
     Superatom* sup = 0;
     RepeatingUnit* sru = 0;
+    ComponentGroup* cg = 0;
+    MixtureGroup* mg = 0;
     if (sgroup->sgroup_type == SGroup::SG_TYPE_DAT)
         dsg = (DataSGroup*)sgroup;
     else if (sgroup->sgroup_type == SGroup::SG_TYPE_SUP)
         sup = (Superatom*)sgroup;
     else if (sgroup->sgroup_type == SGroup::SG_TYPE_SRU)
         sru = (RepeatingUnit*)sgroup;
-
+    else if (sgroup->sgroup_type == SGroup::SG_TYPE_COM)
+        cg = (ComponentGroup*)sgroup;
+    else if (sgroup->sgroup_type == SGroup::SG_TYPE_MIX)
+        mg = (MixtureGroup*)sgroup;
     int n;
 
     while (!scanner.isEOF())
@@ -3619,11 +3691,19 @@ void MolfileLoader::_readSGroup3000(const char* str)
                     sup->subscript.push(c);
                 if (sru != 0)
                     sru->subscript.push(c);
+                if (mg != 0)
+                    mg->subscript.push(c);
+                if (cg != 0)
+                    cg->subscript.push(c);
             }
             if (sup != 0)
                 sup->subscript.push(0);
             if (sru != 0)
                 sru->subscript.push(0);
+            if (mg != 0)
+                mg->subscript.push(0);
+            if (cg != 0)
+                cg->subscript.push(0);
         }
         else if (strcmp(entity.ptr(), "CLASS") == 0)
         {
@@ -3740,6 +3820,12 @@ void MolfileLoader::_readSGroup3000(const char* str)
                 scanner.skipUntil(")");
                 scanner.skip(1);
             }
+        }
+        else if (strcmp(entity.ptr(), "COMPNO") == 0)
+        {
+            int compno = scanner.readInt();
+            if (cg != 0)
+                cg->component_count = compno;
         }
         else
         {

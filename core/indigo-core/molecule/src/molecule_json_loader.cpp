@@ -304,12 +304,11 @@ void MoleculeJsonLoader::parseAtoms(const rapidjson::Value& atoms, BaseMolecule&
         if (a.HasMember("type"))
         {
             std::string atom_type = a["type"].GetString();
-            if (atom_type == "rg-label" && a.HasMember("$refs") && a["$refs"].Size())
+            if (atom_type == "rg-label")
             {
-                std::string ref = a["$refs"][0].GetString();
-                if (ref.find("rg-") == 0 && ref.erase(0, 3).size())
+                // Allow "$refs" to not exist or be empty
+                if (a["$refs"].Size() == 0 || !a.HasMember("$refs"))
                 {
-                    rsite_idx = std::stoi(ref);
                     elem = ELEM_RSITE;
                     label = "R";
                     if (a.HasMember("attachmentOrder"))
@@ -332,7 +331,17 @@ void MoleculeJsonLoader::parseAtoms(const rapidjson::Value& atoms, BaseMolecule&
                     }
                 }
                 else
-                    throw Error("invalid refs: %s", ref.c_str());
+                {
+                    std::string ref = a["$refs"][0].GetString();
+                    if (ref.find("rg-") == 0 && ref.erase(0, 3).size())
+                    {
+                        rsite_idx = std::stoi(ref);
+                        elem = ELEM_RSITE;
+                        label = "R";
+                    }
+                    else
+                        throw Error("invalid refs: %s", ref.c_str());
+                }
             }
             else if (atom_type == "atom-list")
             {
@@ -938,7 +947,7 @@ void MoleculeJsonLoader::parseSGroups(const rapidjson::Value& sgroups, BaseMolec
     {
         const Value& s = sgroups[i];
         const Value& atoms = s["atoms"];
-        std::string sg_type_str = s["type"].GetString(); // GEN, MUL, SRU, SUP
+        std::string sg_type_str = s["type"].GetString(); // GEN, MUL, SRU, SUP, COP, MON, COM, MIX
         if (sg_type_str == "queryComponent")
         {
             if (_pqmol)
@@ -1096,6 +1105,54 @@ void MoleculeJsonLoader::parseSGroups(const rapidjson::Value& sgroups, BaseMolec
 
             if (s.HasMember("displayedChars"))
                 dsg.num_chars = s["displayedChars"].GetInt();
+        }
+        break;
+        case SGroup::SG_TYPE_COP: {
+            CopolymerGroup& ru = (CopolymerGroup&)sgroup;
+            if (s.HasMember("subtype"))
+            {
+                std::string conn = s["subtype"].GetString();
+                if (conn == "RAN")
+                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_RAN;
+                else if (conn == "ALT")
+                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_ALT;
+                else if (conn == "BLO")
+                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_BLO;
+            }
+
+            if (s.HasMember("connectivity"))
+            {
+                std::string conn = s["connectivity"].GetString();
+                if (conn == "HT")
+                    ru.connectivity = RepeatingUnit::HEAD_TO_TAIL;
+                else if (conn == "HH")
+                    ru.connectivity = RepeatingUnit::HEAD_TO_HEAD;
+                else if (conn == "EU")
+                    ru.connectivity = RepeatingUnit::EITHER;
+            }
+        }
+        break;
+        case SGroup::SG_TYPE_MON:
+            // no special parameters
+            break;
+        case SGroup::SG_TYPE_COM: {
+            ComponentGroup& cg = (ComponentGroup&)sgroup;
+            if (s.HasMember("compno"))
+            {
+                cg.component_count = s["compno"].GetInt();
+            }
+            if (s.HasMember("subscript"))
+            {
+                cg.subscript.readString(s["subscript"].GetString(), true);
+            }
+        }
+        break;
+        case SGroup::SG_TYPE_MIX: {
+            MixtureGroup& mg = (MixtureGroup&)sgroup;
+            if (s.HasMember("subscript"))
+            {
+                mg.subscript.readString(s["subscript"].GetString(), true);
+            }
         }
         break;
         default:

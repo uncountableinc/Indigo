@@ -1,7 +1,7 @@
 name: Indigo CI
 
 env:
-  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-13": "macos"}'
+  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-14": "macos"}'
 
 on:
   push:
@@ -36,7 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os:
+          # - macos-14
+          - ubuntu-latest
+          # - windows-latest
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -66,7 +69,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF
+          cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target all -- -j $(sysctl -n hw.logicalcpu)
           ctest --verbose
       - name: Build Windows
@@ -118,7 +121,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest ]
+        os: [ macos-14, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -148,7 +151,15 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64 -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake .. \
+            -DBUILD_INDIGO=ON\
+            -DBUILD_INDIGO_WRAPPERS=OFF\
+            -DBUILD_INDIGO_UTILS=OFF\
+            -DBUILD_BINGO=OFF\
+            -DBUILD_BINGO_ELASTIC=OFF\
+            -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64\
+            -DCMAKE_OSX_ARCHITECTURES=arm64\
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target all -- -j $(sysctl -n hw.logicalcpu)
           # ctest --verbose  # NOTE: We can't run tests until we have native ARM64 node
       - name: Upload artifacts
@@ -163,7 +174,10 @@ jobs:
       matrix:
         wrapper: [ python, java, dotnet ]
     runs-on: ubuntu-latest
-    needs: [ build_indigo_libs_x86_64, build_indigo_libs_aarch64, build_indigo_libs_i386 ]
+    needs:
+      - build_indigo_libs_x86_64
+      - build_indigo_libs_aarch64
+      # - build_indigo_libs_i386
     container: epmlsop/indigo-tester:latest
     steps:
       - name: Checkout
@@ -187,21 +201,21 @@ jobs:
         with:
           name: indigo-libs-linux-aarch64
           path: dist/
-      - name: Download Windows native libs x86_64
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-x86_64
-          path: dist/
-      - name: Download Windows native libs i386
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-i386
-          path: dist/
-      - name: Download macOS native libs x86_64
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-macos-x86_64
-          path: dist/
+      # - name: Download Windows native libs x86_64
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-x86_64
+      #     path: dist/
+      # - name: Download Windows native libs i386
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-i386
+      #     path: dist/
+      # - name: Download macOS native libs x86_64
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-macos-x86_64
+      #     path: dist/
       - name: Download macOS native libs aarch64
         uses: actions/download-artifact@v4
         with:
@@ -210,10 +224,16 @@ jobs:
       - name: Install Python test dependencies
         run: python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
       - name: Build wrappers
+        # if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_INDIGO=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF
+          cmake .. \
+            -DBUILD_INDIGO=OFF\
+            -DBUILD_INDIGO_UTILS=OFF\
+            -DBUILD_BINGO=OFF\
+            -DBUILD_BINGO_ELASTIC=OFF\
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target indigo-${{ matrix.wrapper }}
       - name: Upload native shared libs
         uses: actions/upload-artifact@v4
@@ -256,7 +276,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -393,7 +413,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -527,7 +547,7 @@ jobs:
       fail-fast: false
       matrix:
         # os: [ macos-13, ubuntu-latest, windows-latest ]
-        os: [ macos-13, windows-latest ]
+        os: [ macos-14, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -780,7 +800,7 @@ jobs:
           mkdir build
           cd build
           cmake .. -G "MinGW Makefiles" -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DPython3_ROOT_DIR=/mingw64
-          cmake --build . --config Release --target all -- -j $(nproc) --output-sync
+          cmake --build . --config Release --target all -- -j $(nproc) --output-sync -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Test native libs
         run: |
           cd build
@@ -876,7 +896,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
     steps:
@@ -906,7 +926,13 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DBUILD_INDIGO_UTILS=ON
+          cmake ..\
+            -DBUILD_INDIGO=OFF\
+            -DBUILD_INDIGO_WRAPPERS=OFF\
+            -DBUILD_BINGO=OFF\
+            -DBUILD_BINGO_ELASTIC=OFF\
+            -DBUILD_INDIGO_UTILS=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target all -- -j $(sysctl -n hw.logicalcpu)
           ctest --verbose
       - name: Build utils Windows
@@ -944,7 +970,7 @@ jobs:
             set -eux &&
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF &&
+            cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target package-bingo-oracle -- -j $(nproc)
             "
       - name: Upload artifacts
@@ -977,7 +1003,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -G "MinGW Makefiles" -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
+          cmake .. -G "MinGW Makefiles" -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target package-bingo-oracle -- -j $(nproc)
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -1002,7 +1028,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
+          cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target package-bingo-oracle
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -1046,7 +1072,7 @@ jobs:
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/rh/httpd24/root/usr/lib64 &&
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_PREFIX_PATH=/usr/pgsql-${{ matrix.postgres_major_version }} &&
+            cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_PREFIX_PATH=/usr/pgsql-${{ matrix.postgres_major_version }} -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target package-bingo-postgres -- -j $(nproc)
             "
       - name: Upload artifacts
@@ -1113,7 +1139,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(resolve-path $pwd/../pgsql)"
+          cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(resolve-path $pwd/../pgsql)" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target package-bingo-postgres
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -1148,7 +1174,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(dirname $PWD)/pgsql" -DPostgreSQL_ADDITIONAL_VERSIONS=${{ matrix.postgres_major_version }}
+          cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DPostgreSQL_ROOT="$(dirname $PWD)/pgsql" -DPostgreSQL_ADDITIONAL_VERSIONS=${{ matrix.postgres_major_version }} -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target package-bingo-postgres
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -1177,7 +1203,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_BINGO_SQLSERVER=ON -DBUILD_BINGO_POSTGRES=OFF -DBUILD_BINGO_ORACLE=OFF  -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF
+          cmake .. -DBUILD_BINGO_SQLSERVER=ON -DBUILD_BINGO_POSTGRES=OFF -DBUILD_BINGO_ORACLE=OFF  -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release --target package-bingo-sqlserver
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -213,6 +213,53 @@ namespace indigo
         RepeatingUnit(const RepeatingUnit&);
     };
 
+    class DLLEXPORT CopolymerGroup : public SGroup
+    {
+    public:
+        CopolymerGroup();
+        ~CopolymerGroup() override;
+
+        int connectivity;
+
+    private:
+        CopolymerGroup(const CopolymerGroup&);
+    };
+
+    class DLLEXPORT MonomerGroup : public SGroup
+    {
+    public:
+        MonomerGroup();
+        ~MonomerGroup() override;
+
+    private:
+        MonomerGroup(const MonomerGroup&);
+    };
+
+    class DLLEXPORT ComponentGroup : public SGroup
+    {
+    public:
+        ComponentGroup();
+        ~ComponentGroup() override;
+
+        Array<char> subscript; // SMT in Molfile format
+        int component_count;   // SNC in Molfile format
+
+    private:
+        ComponentGroup(const ComponentGroup&);
+    };
+
+    class DLLEXPORT MixtureGroup : public SGroup
+    {
+    public:
+        MixtureGroup();
+        ~MixtureGroup() override;
+
+        Array<char> subscript; // SMT in Molfile format
+
+    private:
+        MixtureGroup(const MixtureGroup&);
+    };
+
     class DLLEXPORT MultipleGroup : public SGroup
     {
     public:

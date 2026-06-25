@@ -65,8 +65,31 @@ bool MoleculeCIPCalculator::addCIPStereoDescriptors(BaseMolecule& mol)
     stereo_passed.clear();
     equiv_ligands.clear();
 
+    Array<int> allene_atoms;
+    allene_atoms.clear_resize(mol.vertexEnd());
+    allene_atoms.zerofill();
+    for (auto i = mol.allene_stereo.begin(); i != mol.allene_stereo.end(); i = mol.allene_stereo.next(i))
+    {
+        int center_atom, left, right, allene_subst[4], parity;
+        mol.allene_stereo.get(i, center_atom, left, right, allene_subst, parity);
+        allene_atoms[center_atom] = 1;
+        allene_atoms[left] = 1;
+        allene_atoms[right] = 1;
+    }
+
     for (auto i = mol.stereocenters.begin(); i != mol.stereocenters.end(); i = mol.stereocenters.next(i))
     {
+        int sc_atom = mol.stereocenters.getAtomIndex(i);
+        if (allene_atoms[sc_atom])
+            continue;
+        if (mol.stereocenters.isAtropisomeric(sc_atom) && !mol.stereocenters.isTetrahydral(sc_atom))
+        {
+            CIPDesc axial = _calcAxialStereoDescriptor(mol, *unfolded_h_mol, sc_atom, atom_cip_desc);
+            if (axial != CIPDesc::NONE)
+                atom_cip_desc[sc_atom] = axial;
+            continue;
+        }
+
         bool digraph_cip_used = false;
 
         _calcRSStereoDescriptor(mol, *unfolded_h_mol, i, atom_cip_desc, stereo_passed, false, equiv_ligands, digraph_cip_used);
@@ -151,13 +174,27 @@ bool MoleculeCIPCalculator::addCIPStereoDescriptors(BaseMolecule& mol)
         _calcEZStereoDescriptor(mol, *unfolded_h_mol, i, bond_cip_desc);
     }
 
+    for (auto i = mol.allene_stereo.begin(); i != mol.allene_stereo.end(); i = mol.allene_stereo.next(i))
+    {
+        int center_atom, left, right, allene_subst[4], parity;
+        mol.allene_stereo.get(i, center_atom, left, right, allene_subst, parity);
+        CIPDesc axial = _calcAlleneStereoDescriptor(mol, *unfolded_h_mol, left, right, allene_subst, parity, atom_cip_desc);
+        if (axial != CIPDesc::NONE)
+            atom_cip_desc[center_atom] = axial;
+    }
+
     mol._cip_atoms.clear();
     mol._cip_bonds.clear();
 
     for (atom_idx = 0; atom_idx < atom_cip_desc.size(); ++atom_idx)
     {
-        if (atom_cip_desc[atom_idx] > CIPDesc::UNKNOWN)
-            mol._cip_atoms.insert(atom_idx, atom_cip_desc[atom_idx]);
+        CIPDesc desc = atom_cip_desc[atom_idx];
+        if (desc > CIPDesc::UNKNOWN)
+        {
+            if ((desc == CIPDesc::R || desc == CIPDesc::S) && mol.stereocenters.getType(atom_idx) == MoleculeStereocenters::ATOM_AND)
+                desc = CIPDesc::RS;
+            mol._cip_atoms.insert(atom_idx, desc);
+        }
     }
 
     for (auto bond_idx = 0; bond_idx < bond_cip_desc.size(); ++bond_idx)
@@ -202,6 +239,15 @@ void MoleculeCIPCalculator::addCIPSgroups(BaseMolecule& mol)
             break;
         case CIPDesc::s:
             sgroup.data.readString("(s)", true);
+            break;
+        case CIPDesc::RS:
+            sgroup.data.readString("(RS)", true);
+            break;
+        case CIPDesc::P:
+            sgroup.data.readString("(P)", true);
+            break;
+        case CIPDesc::M:
+            sgroup.data.readString("(M)", true);
             break;
         }
 
@@ -270,6 +316,9 @@ void MoleculeCIPCalculator::convertSGroupsToCIP(BaseMolecule& mol)
                     case CIPDesc::r:
                     case CIPDesc::S:
                     case CIPDesc::R:
+                    case CIPDesc::RS:
+                    case CIPDesc::P:
+                    case CIPDesc::M:
                         // atoms
                         for (auto atom_idx : dsg.atoms)
                             mol.setAtomCIP(atom_idx, cip_it->second);
@@ -979,6 +1028,190 @@ void MoleculeCIPCalculator::_calcEZStereoDescriptor(BaseMolecule& mol, BaseMolec
         }
     }
     return;
+}
+
+CIPDesc MoleculeCIPCalculator::_calcAxialStereoDescriptor(BaseMolecule& mol, BaseMolecule& unfolded_h_mol, int atom_idx, Array<CIPDesc>& cip_desc)
+{
+    int axis_bond = mol.stereocenters.getAtropisomericBond(atom_idx);
+    if (axis_bond < 0)
+        return CIPDesc::NONE;
+
+    const Edge& axis_edge = mol.getEdge(axis_bond);
+    int near_atom = atom_idx;
+    int far_atom = (axis_edge.beg == near_atom) ? axis_edge.end : axis_edge.beg;
+    if (far_atom == near_atom)
+        return CIPDesc::NONE;
+
+    Array<int> near_orthos;
+    Array<int> far_orthos;
+    int wedged_atom = -1;
+    float wedged_z = 0.0f;
+
+    const Vertex& near_v = mol.getVertex(near_atom);
+    for (int i = near_v.neiBegin(); i != near_v.neiEnd(); i = near_v.neiNext(i))
+    {
+        int edge_idx = near_v.neiEdge(i);
+        if (mol.getBondTopology(edge_idx) != TOPOLOGY_RING)
+            continue;
+        int nei = near_v.neiVertex(i);
+        near_orthos.push(nei);
+        int dir = mol.getBondDirection(edge_idx);
+        if (dir == BOND_UP || dir == BOND_DOWN)
+        {
+            wedged_atom = nei;
+            wedged_z = (dir == BOND_UP) ? 1.0f : -1.0f;
+            if (mol.getEdge(edge_idx).beg != near_atom)
+                wedged_z = -wedged_z;
+        }
+    }
+
+    const Vertex& far_v = mol.getVertex(far_atom);
+    for (int i = far_v.neiBegin(); i != far_v.neiEnd(); i = far_v.neiNext(i))
+    {
+        int edge_idx = far_v.neiEdge(i);
+        if (mol.getBondTopology(edge_idx) != TOPOLOGY_RING)
+            continue;
+        far_orthos.push(far_v.neiVertex(i));
+    }
+
+    if (near_orthos.size() != 2 || far_orthos.size() != 2 || wedged_atom < 0)
+        return CIPDesc::NONE;
+
+    auto higher_priority_ortho = [&](int origin, Array<int>& pair, int& hi) -> bool {
+        Array<int> used1;
+        Array<int> used2;
+        used1.push(origin);
+        used2.push(origin);
+        CIPContext context;
+        context.mol = &unfolded_h_mol;
+        context.cip_desc = &cip_desc;
+        context.used1 = &used1;
+        context.used2 = &used2;
+        context.next_level = true;
+        context.isotope_check = false;
+        context.use_stereo = false;
+        context.use_rule_4 = false;
+        context.ref_cip1 = CIPDesc::NONE;
+        context.ref_cip2 = CIPDesc::NONE;
+        context.use_rule_5 = false;
+        int cmp = _cip_rules_cmp(pair[0], pair[1], &context);
+        if (cmp == 0)
+            return false;
+        hi = (cmp < 0) ? pair[0] : pair[1];
+        return true;
+    };
+
+    int near_hi, far_hi;
+    if (!higher_priority_ortho(near_atom, near_orthos, near_hi))
+        return CIPDesc::NONE;
+    if (!higher_priority_ortho(far_atom, far_orthos, far_hi))
+        return CIPDesc::NONE;
+
+    Vec3f near_pos = mol.getAtomXyz(near_atom);
+    Vec3f far_pos = mol.getAtomXyz(far_atom);
+    Vec3f axis_vec;
+    axis_vec.diff(far_pos, near_pos);
+
+    Vec3f vec_near_hi;
+    vec_near_hi.diff(mol.getAtomXyz(near_hi), near_pos);
+    Vec3f vec_wedged;
+    vec_wedged.diff(mol.getAtomXyz(wedged_atom), near_pos);
+
+    int ss = MoleculeAlleneStereo::sameside(vec_near_hi, vec_wedged, axis_vec);
+    if (ss == 0)
+        return CIPDesc::NONE;
+
+    Vec3f p0 = mol.getAtomXyz(near_hi);
+    p0.z = wedged_z * ss;
+    Vec3f p1 = near_pos;
+    Vec3f p2 = far_pos;
+    Vec3f p3 = mol.getAtomXyz(far_hi);
+
+    Vec3f b0, b1, b2, n1, n2, m;
+    b0.diff(p0, p1);
+    b1.diff(p2, p1);
+    b2.diff(p3, p2);
+    n1.cross(b0, b1);
+    n2.cross(b1, b2);
+    m.cross(n1, b1);
+    float torsion_sign = Vec3f::dot(m, n2);
+    if (torsion_sign == 0)
+        return CIPDesc::NONE;
+
+    return (torsion_sign > 0) ? CIPDesc::P : CIPDesc::M;
+}
+
+CIPDesc MoleculeCIPCalculator::_calcAlleneStereoDescriptor(BaseMolecule& mol, BaseMolecule& unfolded_h_mol, int left, int right, int subst[4], int parity,
+                                                           Array<CIPDesc>& cip_desc)
+{
+    auto higher_priority_slot = [&](int origin, int a, int b, int& hi_slot) -> bool {
+        if (subst[a] == -1)
+            return false;
+        if (subst[b] == -1)
+        {
+            hi_slot = a;
+            return true;
+        }
+        Array<int> used1;
+        Array<int> used2;
+        used1.push(origin);
+        used2.push(origin);
+        CIPContext context;
+        context.mol = &unfolded_h_mol;
+        context.cip_desc = &cip_desc;
+        context.used1 = &used1;
+        context.used2 = &used2;
+        context.next_level = true;
+        context.isotope_check = false;
+        context.use_stereo = false;
+        context.use_rule_4 = false;
+        context.ref_cip1 = CIPDesc::NONE;
+        context.ref_cip2 = CIPDesc::NONE;
+        context.use_rule_5 = false;
+        int cmp = _cip_rules_cmp(subst[a], subst[b], &context);
+        if (cmp == 0)
+            return false;
+        hi_slot = (cmp < 0) ? a : b;
+        return true;
+    };
+
+    int left_hi_slot, right_hi_slot;
+    if (!higher_priority_slot(left, 0, 1, left_hi_slot))
+        return CIPDesc::NONE;
+    if (!higher_priority_slot(right, 2, 3, right_hi_slot))
+        return CIPDesc::NONE;
+
+    auto slot_dir = [&](int slot, float& x, float& y) {
+        switch (slot)
+        {
+        case 0:
+            x = 1.0f;
+            y = 0.0f;
+            break;
+        case 1:
+            x = -1.0f;
+            y = 0.0f;
+            break;
+        case 2:
+            x = 0.0f;
+            y = (parity == 1) ? 1.0f : -1.0f;
+            break;
+        default:
+            x = 0.0f;
+            y = (parity == 1) ? -1.0f : 1.0f;
+            break;
+        }
+    };
+
+    float lx, ly, rx, ry;
+    slot_dir(left_hi_slot, lx, ly);
+    slot_dir(right_hi_slot, rx, ry);
+
+    float turn = lx * ry - ly * rx;
+    if (turn == 0.0f)
+        return CIPDesc::NONE;
+
+    return (turn > 0.0f) ? CIPDesc::M : CIPDesc::P;
 }
 
 inline void MoleculeCIPCalculator::cipSort(Array<int>& array, CIPContext* context)

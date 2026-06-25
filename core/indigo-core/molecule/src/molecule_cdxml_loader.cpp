@@ -571,13 +571,44 @@ void MoleculeCdxmlLoader::_parseCollections(BaseMolecule& mol)
         }
     }
 
+    // Build a set of inner node IDs for fragment nodes where internal collapsed
+    // bonds should be filtered. For fragments connected to the outer molecule,
+    // preserve all internal bonds so chemistry remains intact.
+    std::unordered_set<int> all_inner_node_ids;
+    for (auto fidx : _fragment_nodes)
+    {
+        auto& frag_node = nodes[fidx];
+
+        // Connected fragments (via ExternalConnectionPoint) encode real
+        // substituent structure, so dropping their inner bonds breaks valence.
+        if (!frag_node.ext_connections.empty())
+            continue;
+
+        for (auto inner_id : frag_node.inner_nodes)
+            all_inner_node_ids.insert(inner_id);
+    }
+
+    // Filter out bonds where both endpoints are inner nodes of a collapsed
+    // fragment. These bonds are zero-length (all inner atoms share the parent
+    // node's position) and keeping them skews Ketcher's average-bond-length
+    // calculation, causing incorrect scale.
+    std::vector<CdxmlBond> filtered_bonds;
     for (const auto& bond : bonds)
+    {
+        bool first_inner = all_inner_node_ids.count(bond.be.first) > 0;
+        bool second_inner = all_inner_node_ids.count(bond.be.second) > 0;
+        if (first_inner && second_inner)
+            continue;
+        filtered_bonds.push_back(bond);
+    }
+
+    for (const auto& bond : filtered_bonds)
     {
         _checkFragmentConnection(bond.be.first, bond.id);
         _checkFragmentConnection(bond.be.second, bond.id);
     }
 
-    _addAtomsAndBonds(mol, atoms, bonds);
+    _addAtomsAndBonds(mol, atoms, filtered_bonds);
 
     _processEnhancedStereo(mol);
 
@@ -836,8 +867,9 @@ void MoleculeCdxmlLoader::_parseCDXMLElements(BaseCDXElement& first_elem, bool n
             {
                 auto it = std::upper_bound(fragment_node.inner_nodes.cbegin(), fragment_node.inner_nodes.cend(), fragment_node.id,
                                            [](int a, int b) { return a > b; });
-                if (nodes[i].pos.x == 0 && nodes[i].pos.y == 0) // if no coord - copy from parent
-                    nodes[i].pos = fragment_node.pos;
+                // Inner atom coords are from the hidden/expanded structure in an unrelated coordinate space.
+                // Always use the parent node's page position for all inner atoms.
+                nodes[i].pos = fragment_node.pos;
                 fragment_node.inner_nodes.insert(it, nodes[i].id);
             }
         }

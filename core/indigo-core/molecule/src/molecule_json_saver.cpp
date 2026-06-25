@@ -424,14 +424,44 @@ void MoleculeJsonSaver::saveSGroup(SGroup& sgroup, JsonWriter& writer)
     }
     break;
     case SGroup::SG_TYPE_MON:
-        throw Error("SG_TYPE_MON not implemented in indigo yet");
         break;
     case SGroup::SG_TYPE_MER:
         throw Error("SG_TYPE_MER not implemented in indigo yet");
         break;
-    case SGroup::SG_TYPE_COP:
-        throw Error("SG_TYPE_COP not implemented in indigo yet");
-        break;
+    case SGroup::SG_TYPE_COP: {
+        CopolymerGroup& ru = (CopolymerGroup&)sgroup;
+        if (ru.sgroup_subtype != 0)
+        {
+            writer.Key("subtype");
+            if (ru.sgroup_subtype == SGroup::SG_SUBTYPE_ALT)
+            {
+                writer.String("ALT");
+            }
+            else if (ru.sgroup_subtype == SGroup::SG_SUBTYPE_RAN)
+            {
+                writer.String("RAN");
+            }
+            else if (ru.sgroup_subtype == SGroup::SG_SUBTYPE_BLO)
+            {
+                writer.String("BLO");
+            }
+        }
+
+        writer.Key("connectivity");
+        switch (ru.connectivity)
+        {
+        case SGroup::HEAD_TO_TAIL:
+            writer.String("HT");
+            break;
+        case SGroup::HEAD_TO_HEAD:
+            writer.String("HH");
+            break;
+        default:
+            writer.String("EU");
+            break;
+        }
+    }
+    break;
     case SGroup::SG_TYPE_CRO:
         throw Error("SG_TYPE_CRO not implemented in indigo yet");
         break;
@@ -441,12 +471,29 @@ void MoleculeJsonSaver::saveSGroup(SGroup& sgroup, JsonWriter& writer)
     case SGroup::SG_TYPE_GRA:
         throw Error("SG_TYPE_GRA not implemented in indigo yet");
         break;
-    case SGroup::SG_TYPE_COM:
-        throw Error("SG_TYPE_COM not implemented in indigo yet");
-        break;
-    case SGroup::SG_TYPE_MIX:
-        throw Error("SG_TYPE_MIX not implemented in indigo yet");
-        break;
+    case SGroup::SG_TYPE_COM: {
+        ComponentGroup& cg = (ComponentGroup&)sgroup;
+        if (cg.component_count > 0)
+        {
+            writer.Key("compno");
+            writer.Int(cg.component_count);
+        }
+        if (cg.subscript.size())
+        {
+            writer.Key("subscript");
+            writer.String(cg.subscript.ptr());
+        }
+    }
+    break;
+    case SGroup::SG_TYPE_MIX: {
+        MixtureGroup& mg = (MixtureGroup&)sgroup;
+        if (mg.subscript.size())
+        {
+            writer.Key("subscript");
+            writer.String(mg.subscript.ptr());
+        }
+    }
+    break;
     case SGroup::SG_TYPE_FOR:
         throw Error("SG_TYPE_FOR not implemented in indigo yet");
         break;

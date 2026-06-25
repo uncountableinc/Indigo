@@ -426,6 +426,7 @@ void MolfileSaver::_writeAtomLabel(Output& output, int label)
 void MolfileSaver::_writeMultiString(Output& output, const char* string, int len)
 {
     int limit = 70;
+    int spaceLimit = 70;
     while (len > 0)
     {
         output.writeString("M  V30 ");
@@ -433,12 +434,29 @@ void MolfileSaver::_writeMultiString(Output& output, const char* string, int len
         if (len <= limit)
             limit = len;
 
-        output.write(string, limit);
-        if (len != limit)
+        spaceLimit = 70;
+        for (int i = 0; i < limit && i < len; ++i)
+        {
+            if (string[i] == ' ')
+            {
+                spaceLimit = i + 1;
+            }
+        }
+        if (len > limit)
+        {
+            spaceLimit = std::min(limit, spaceLimit);
+        }
+        else
+        {
+            spaceLimit = len;
+        }
+
+        output.write(string, spaceLimit);
+        if (len != spaceLimit)
             output.writeString("-");
         output.writeCR();
-        len -= limit;
-        string += limit;
+        len -= spaceLimit;
+        string += spaceLimit;
     }
 }
 
@@ -1043,6 +1061,54 @@ void MolfileSaver::_writeCtab(Output& output, BaseMolecule& mol, bool query)
                 }
                 _writeMultiString(output, buf.ptr(), buf.size());
             }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_COP)
+            {
+                CopolymerGroup& cg = static_cast<CopolymerGroup&>(sgroup);
+                if (cg.connectivity == SGroup::HEAD_TO_HEAD)
+                    out.printf(" CONNECT=HH");
+                else if (cg.connectivity == SGroup::HEAD_TO_TAIL)
+                    out.printf(" CONNECT=HT");
+                else
+                    out.printf(" CONNECT=EU");
+                if (cg.sgroup_subtype != 0)
+                {
+                    if (cg.sgroup_subtype == SGroup::SG_SUBTYPE_ALT)
+                        out.printf(" SUBTYPE=ALT");
+                    else if (cg.sgroup_subtype == SGroup::SG_SUBTYPE_RAN)
+                        out.printf(" SUBTYPE=RAN");
+                    else if (cg.sgroup_subtype == SGroup::SG_SUBTYPE_BLO)
+                        out.printf(" SUBTYPE=BLO");
+                }
+                _writeMultiString(output, buf.ptr(), buf.size());
+            }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_COM)
+            {
+
+                ComponentGroup& cg = static_cast<ComponentGroup&>(sgroup);
+
+                if (cg.subscript.size() > 1)
+                {
+                    out.printf(" LABEL=%s", cg.subscript.ptr());
+                }
+                if (cg.component_count > 0)
+                {
+                    out.printf(" COMPNO=%d", cg.component_count);
+                }
+                _writeMultiString(output, buf.ptr(), buf.size());
+            }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_MON)
+            {
+                _writeMultiString(output, buf.ptr(), buf.size());
+            }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_MIX)
+            {
+                MixtureGroup& mg = static_cast<MixtureGroup&>(sgroup);
+                if (mg.subscript.size() > 1)
+                {
+                    out.printf(" LABEL=%s", mg.subscript.ptr());
+                }
+                _writeMultiString(output, buf.ptr(), buf.size());
+            }
             else if (sgroup.sgroup_type == SGroup::SG_TYPE_MUL)
             {
                 MultipleGroup& mg = static_cast<MultipleGroup&>(sgroup);
@@ -1136,7 +1202,8 @@ void MolfileSaver::_writeGenericSGroup3000(SGroup& sgroup, int idx, Output& outp
     for (i = 0; i < sgroup.brackets.size(); i++)
     {
         Vec2f* brackets = sgroup.brackets[i];
-        output.printf(" BRKXYZ=(9 %f %f %f %f %f %f %f %f %f)", brackets[0].x, brackets[0].y, 0.f, brackets[1].x, brackets[1].y, 0.f, 0.f, 0.f, 0.f);
+        output.printf(" BRKXYZ=(9 %.8g %.8g %.8g %.8g %.8g %.8g %.8g %.8g %.8g)", brackets[0].x, brackets[0].y, 0.f, brackets[1].x, brackets[1].y, 0.f, 0.f,
+                      0.f, 0.f);
     }
     if (sgroup.brackets.size() > 0 && sgroup.brk_style > 0)
     {
@@ -1734,6 +1801,26 @@ void MolfileSaver::_writeCtab2000(Output& output, BaseMolecule& mol, bool query)
             output.writeCR();
         }
 
+        int cop_count = mol.sgroups.getSGroupCount(SGroup::SG_TYPE_COP);
+        for (j = 0; j < cop_count; j += 8)
+        {
+            output.printf("M  SCN%3d", std::min(cop_count, j + 8) - j);
+            for (i = j; i < std::min(cop_count, j + 8); i++)
+            {
+                RepeatingUnit* ru = (RepeatingUnit*)&mol.sgroups.getSGroup(i, SGroup::SG_TYPE_COP);
+
+                output.printf(" %3d ", ru->original_group);
+
+                if (ru->connectivity == SGroup::HEAD_TO_HEAD)
+                    output.printf("HH ");
+                else if (ru->connectivity == SGroup::HEAD_TO_TAIL)
+                    output.printf("HT ");
+                else
+                    output.printf("EU ");
+            }
+            output.writeCR();
+        }
+
         for (i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
         {
             SGroup& sgroup = mol.sgroups.getSGroup(i);
@@ -1887,6 +1974,25 @@ void MolfileSaver::_writeCtab2000(Output& output, BaseMolecule& mol, bool query)
                 }
 
                 output.printf("M  SMT %3d %d\n", mg.original_group, mg.multiplier);
+            }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_COM)
+            {
+                ComponentGroup& cg = (ComponentGroup&)sgroup;
+                if (cg.subscript.size() > 1)
+                {
+                    if (cg.subscript.find(' ') > -1)
+                        output.printfCR("M  SMT %3d \"%s\"", cg.original_group, cg.subscript.ptr());
+                    else
+                        output.printfCR("M  SMT %3d %s", cg.original_group, cg.subscript.ptr());
+                }
+                if (cg.component_count > 0)
+                    output.printfCR("M  SNC %3d %d", cg.original_group, cg.component_count);
+            }
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_MIX)
+            {
+                MixtureGroup& mg = (MixtureGroup&)sgroup;
+                if (mg.subscript.size() > 1)
+                    output.printfCR("M  SMT %3d %s", mg.original_group, mg.subscript.ptr());
             }
             for (j = 0; j < sgroup.brackets.size(); j++)
             {
