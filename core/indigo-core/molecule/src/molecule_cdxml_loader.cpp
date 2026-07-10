@@ -571,44 +571,22 @@ void MoleculeCdxmlLoader::_parseCollections(BaseMolecule& mol)
         }
     }
 
-    // Build a set of inner node IDs for fragment nodes where internal collapsed
-    // bonds should be filtered. For fragments connected to the outer molecule,
-    // preserve all internal bonds so chemistry remains intact.
-    std::unordered_set<int> all_inner_node_ids;
-    for (auto fidx : _fragment_nodes)
-    {
-        auto& frag_node = nodes[fidx];
-
-        // Connected fragments (via ExternalConnectionPoint) encode real
-        // substituent structure, so dropping their inner bonds breaks valence.
-        if (!frag_node.ext_connections.empty())
-            continue;
-
-        for (auto inner_id : frag_node.inner_nodes)
-            all_inner_node_ids.insert(inner_id);
-    }
-
-    // Filter out bonds where both endpoints are inner nodes of a collapsed
-    // fragment. These bonds are zero-length (all inner atoms share the parent
-    // node's position) and keeping them skews Ketcher's average-bond-length
-    // calculation, causing incorrect scale.
-    std::vector<CdxmlBond> filtered_bonds;
+    // Do not drop inner bonds of collapsed fragments. Position collapse puts
+    // every inner atom on the parent node's page position, which makes these
+    // bonds zero-length; an earlier filter deleted them to avoid skewing
+    // Ketcher's average-bond-length scaling. But those are real chemical bonds
+    // (e.g. the benzene ring inside a "Benzene" nickname, or B-OH inside a
+    // B(OH)2 substituent), so dropping them corrupts the molecule — benzene
+    // loads as methane, phenylboronic acid as C6H11BO2 instead of C6H7BO2.
+    // The scaling skew is cosmetic and the position collapse already handles
+    // the text distortion; data integrity wins, so keep every bond.
     for (const auto& bond : bonds)
-    {
-        bool first_inner = all_inner_node_ids.count(bond.be.first) > 0;
-        bool second_inner = all_inner_node_ids.count(bond.be.second) > 0;
-        if (first_inner && second_inner)
-            continue;
-        filtered_bonds.push_back(bond);
-    }
-
-    for (const auto& bond : filtered_bonds)
     {
         _checkFragmentConnection(bond.be.first, bond.id);
         _checkFragmentConnection(bond.be.second, bond.id);
     }
 
-    _addAtomsAndBonds(mol, atoms, filtered_bonds);
+    _addAtomsAndBonds(mol, atoms, bonds);
 
     _processEnhancedStereo(mol);
 
