@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE CDXML SYSTEM "https://static.chemistry.revvitycloud.com/cdxml/CDXML.dtd" >
+<CDXML
+ CreationProgram="ChemDraw 25.5.0.6237"
+ Name="Benzene.cdxml"
+ BoundingBox="207.73 109.84 246.06 117.12"
+ WindowPosition="0 0"
+ WindowSize="0 0"
+ FractionalWidths="yes"
+ InterpretChemically="yes"
+ ShowAtomQuery="yes"
+ ShowAtomStereo="no"
+ ShowAtomEnhancedStereo="yes"
+ ShowAtomNumber="no"
+ ShowResidueID="no"
+ ShowBondQuery="yes"
+ ShowBondRxn="yes"
+ ShowBondStereo="no"
+ ShowTerminalCarbonLabels="no"
+ ShowNonTerminalCarbonLabels="no"
+ HideImplicitHydrogens="no"
+ LabelFont="60"
+ LabelSize="10"
+ LabelFace="96"
+ CaptionFont="60"
+ CaptionSize="10"
+ HashSpacing="2.49"
+ MarginWidth="1.59"
+ LineWidth="0.60"
+ BoldWidth="2.01"
+ BondLength="14.40"
+ BondSpacing="18"
+ ChainAngle="120"
+ LabelJustification="Auto"
+ CaptionJustification="Left"
+ AminoAcidTermini="HOH"
+ ShowSequenceTermini="yes"
+ ShowSequenceBonds="yes"
+ ShowSequenceUnlinkedBranches="no"
+ ShowPrimeLabels="no"
+ ResidueWrapCount="40"
+ PrintMargins="36 36 36 36"
+ MacPrintInfo="00030000004800480000000002DE0240FFEEFFEE030602520367052803FC00020000004800480000000002DE0240000100000064000000010001010100000001270F000100010000000000000000000000000002001901900000000000400000000000000000000100000000000000000000000000000000"
+ ChemPropName=""
+ ChemPropFormula="Chemical formula: "
+ ChemPropExactMass="Exact mass: "
+ ChemPropMolWt="Molecular weight: "
+ ChemPropMOverZ="m/z: "
+ ChemPropAnalysis="Elemental analysis: "
+ ChemPropBoilingPt="Boiling point: "
+ ChemPropMeltingPt="Melting point: "
+ ChemPropCritTemp="Critical temp: "
+ ChemPropCritPres="Critical pres: "
+ ChemPropCritVol="Critical vol: "
+ ChemPropGibbs="Gibbs energy: "
+ ChemPropLogP="Log P: "
+ ChemPropMR="MR: "
+ ChemPropHenry="Henry&apos;s law: "
+ ChemPropEForm="Heat of form: "
+ ChemProptPSA="tPSA: "
+ ChemPropID=""
+ ChemPropFragmentLabel=""
+ color="0"
+ bgcolor="1"
+ RxnAutonumberStart="1"
+ RxnAutonumberConditions="no"
+ RxnAutonumberStyle="Roman"
+ RxnAutonumberFormat="(#)"
+ MonomerRenderingStyle="graphic"
+><colortable>
+<color r="1" g="1" b="1"/>
+<color r="0" g="0" b="0"/>
+<color r="1" g="0" b="0"/>
+<color r="1" g="1" b="0"/>
+<color r="0" g="1" b="0"/>
+<color r="0" g="1" b="1"/>
+<color r="0" g="0" b="1"/>
+<color r="1" g="0" b="1"/>
+</colortable><fonttable>
+<font id="60" charset="x-mac-roman" name="Arial"/>
+</fonttable><page
+ id="53"
+ BoundingBox="0 0 540 720"
+ HeaderPosition="36"
+ FooterPosition="36"
+ PrintTrimMarks="yes"
+ HeightPages="1"
+ WidthPages="1"
+><fragment
+ id="49"
+ BoundingBox="207.73 109.84 246.06 117.12"
+ Z="43"
+><n
+ id="48"
+ p="210.33 113.42"
+ Z="42"
+ NodeType="Nickname"
+ NeedsClean="yes"
+ AS="N"
+ AtomID="1"
+><fragment
+ id="54"
+><n
+ id="55"
+ p="270.04 322.37"
+/><n
+ id="56"
+ p="282.47 329.55"
+/><n
+ id="57"
+ p="294.90 322.37"
+/><n
+ id="58"
+ p="294.90 308.02"
+/><n
+ id="59"
+ p="282.47 300.85"
+/><n
+ id="60"
+ p="270.04 308.02"
+/><b
+ id="61"
+ B="60"
+ E="55"
+/><b
+ id="62"
+ B="59"
+ E="60"
+ Order="2"
+/><b
+ id="63"
+ B="58"
+ E="59"
+/><b
+ id="64"
+ B="57"
+ E="58"
+ Order="2"
+/><b
+ id="65"
+ B="56"
+ E="57"
+/><b
+ id="66"
+ B="55"
+ E="56"
+ Order="2"
+/></fragment><t
+ id="47"
+ p="207 117"
+ BoundingBox="207.73 109.84 246.06 117.12"
+ Z="41"
+ LabelJustification="Left"
+ LabelLineHeight="auto"
+ LineHeight="auto"
+ LabelAlignment="Left"
+><s font="60" size="10" color="0">Benzene</s></t></n></fragment></page></CDXML>
