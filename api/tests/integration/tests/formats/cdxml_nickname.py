@@ -38,7 +38,23 @@ for filename in sorted(os.listdir(root)):
         continue
     mols = list(obj.iterateMolecules()) if is_reaction else [obj]
     for i, mol in enumerate(mols):
+        # Distinct atom positions guard against the collapsed-fragment bug:
+        # inner atoms of a collapsed nickname must keep their real geometry,
+        # not all land on the parent node's point (which rendered as an empty
+        # box). "collapsed" means every atom shares one coordinate.
+        pts = {
+            (round(a.xyz()[0], 3), round(a.xyz()[1], 3))
+            for a in mol.iterateAtoms()
+        }
+        collapsed = mol.countAtoms() > 1 and len(pts) == 1
         print(
-            "  component %d: atoms=%d bonds=%d formula=%s"
-            % (i, mol.countAtoms(), mol.countBonds(), mol.grossFormula())
+            "  component %d: atoms=%d bonds=%d formula=%s distinct_positions=%d%s"
+            % (
+                i,
+                mol.countAtoms(),
+                mol.countBonds(),
+                mol.grossFormula(),
+                len(pts),
+                " COLLAPSED!" if collapsed else "",
+            )
         )
