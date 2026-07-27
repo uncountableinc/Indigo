@@ -15,27 +15,27 @@ CDXML loader: Queries not supported
 issue_1777:success
 agents:success
 *** CDXML to CDX ***
-AlcoholOxidation_Rxn1:success
-AlcoholOxidation_Rxn2:success
-Amidation_Rxn1:success
-Amidation_Rxn2:success
-BuchwaldHartwig_Rxn1:success
-BuchwaldHartwig_Rxn2:success
-CarbonylReduction_Rxn1:success
-CarbonylReduction_Rxn2:success
-Esterification_Rxn1:success
+AlcoholOxidation_Rxn1:failed
+AlcoholOxidation_Rxn2:failed
+Amidation_Rxn1:failed
+Amidation_Rxn2:failed
+BuchwaldHartwig_Rxn1:failed
+BuchwaldHartwig_Rxn2:failed
+CarbonylReduction_Rxn1:failed
+CarbonylReduction_Rxn2:failed
+Esterification_Rxn1:failed
 Esterification_Rxn2:success
-Grignard_Rxn1:success
-Grignard_Rxn2:success
-N-Alkylation_Rxn1:success
-N-Alkylation_Rxn2:success
-N-Sulfonylation_Rxn1:success
-N-Sulfonylation_Rxn2:success
-O-Alkylation_Rxn1:success
-O-Alkylation_Rxn2:success
-Reductive Amination_Rxn1:success
-Reductive Amination_Rxn2:success
-SnAr_Rxn1:success
-SnAr_Rxn2:success
-Suzuki_Rxn1:success
-Suzuki_Rxn2:success
+Grignard_Rxn1:failed
+Grignard_Rxn2:failed
+N-Alkylation_Rxn1:failed
+N-Alkylation_Rxn2:failed
+N-Sulfonylation_Rxn1:failed
+N-Sulfonylation_Rxn2:failed
+O-Alkylation_Rxn1:failed
+O-Alkylation_Rxn2:failed
+Reductive Amination_Rxn1:failed
+Reductive Amination_Rxn2:failed
+SnAr_Rxn1:failed
+SnAr_Rxn2:failed
+Suzuki_Rxn1:failed
+Suzuki_Rxn2:failed

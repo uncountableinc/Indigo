@@ -20,17 +20,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      #   with:
-      #     lfs: false
-      #     fetch-depth: 500
-      # - name: Git fetch tags
-      #   run: |
-      #        git config --global --add safe.directory '*'
-      #        git fetch --tags -f
-      # - name: Check
-      #   run: |
-      #     python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
-      #     .ci/static_analysis_check.sh
+        with:
+          lfs: false
+          fetch-depth: 500
+      - name: Git fetch tags
+        run: |
+             git config --global --add safe.directory '*'
+             git fetch --tags -f
+      - name: Check
+        run: |
+          python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
+          .ci/static_analysis_check.sh
 
   build_indigo_libs_x86_64:
     strategy:
@@ -310,7 +310,6 @@ jobs:
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: python3 -m pip install dist/*macosx_*.whl --break-system-packages
       - name: Test
-        continue-on-error: true
         run: python3 -Wignore api/tests/integration/test.py -t 1 -j junit_report.xml
       - name: Upload test output
         if: always()
