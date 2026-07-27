@@ -102,3 +102,5 @@ third_party/cairo/src/cairo-features.h.h
 .kdev4/
 indigo.kdev4
 debug/
+.direnv
+.venv
