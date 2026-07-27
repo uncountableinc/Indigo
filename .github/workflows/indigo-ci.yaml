@@ -1,7 +1,7 @@
 name: Indigo CI
 
 env:
-  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-14": "macos"}'
+  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-13": "macos"}'
 
 on:
   push:
@@ -37,9 +37,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # - macos-14
+          - macos-14
           - ubuntu-latest
-          # - windows-latest
+          - windows-latest
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -58,6 +58,7 @@ jobs:
         with:
           args: >
             /bin/sh -c "
+            cc --version &&
             mkdir build &&
             cd build &&
             cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF &&
@@ -67,6 +68,7 @@ jobs:
       - name: Build macOS
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
+          cc --version
           mkdir build
           cd build
           cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -140,6 +142,7 @@ jobs:
         with:
           args: >
             /bin/sh -c "
+            cc --version
             mkdir build &&
             cd build &&
             cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64 &&
@@ -149,6 +152,7 @@ jobs:
       - name: Build macOS
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
+          cc --version
           mkdir build
           cd build
           cmake .. \
@@ -297,7 +301,7 @@ jobs:
           name: indigo-python
           path: dist/
       - name: Install Pillow
-        run: python3 -m pip install Pillow
+        run: python3 -m pip install Pillow --break-system-packages
       - name: Install wrappers Linux
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: python3 -m pip install dist/*manylinux1_x86_64*.whl
@@ -353,7 +357,7 @@ jobs:
             apt update
             apt install -y --no-install-recommends python3 python3-pip
             apt install -y python3-pil
-            python3 -m pip install dist/*manylinux2014_aarch64*.whl
+            python3 -m pip install dist/*manylinux2014_aarch64*.whl --break-system-packages
             python3 api/tests/integration/test.py -p basic/basic.py -t 1 -j junit_report.xml
       - name: Publish Test Report
         if: always()
