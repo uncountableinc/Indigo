@@ -1502,3 +1502,21 @@ jobs:
           docker tag ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
           docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
           docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest
+
+  create_github_release:
+    if: startsWith(github.ref, 'refs/tags/indigo-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build_indigo_wrappers]
+    steps:
+      - name: Download Python wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: indigo-python
+          path: dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
+          draft: true
