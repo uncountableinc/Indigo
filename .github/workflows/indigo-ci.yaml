@@ -142,7 +142,6 @@ jobs:
         with:
           args: >
             /bin/sh -c "
-            cc --version
             mkdir build &&
             cd build &&
             cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64 &&
