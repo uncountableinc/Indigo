@@ -1392,9 +1392,9 @@ jobs:
         run: docker build -f ./utils/indigo-service/backend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/indigo-service:latest ./utils/indigo-service/backend
       - name: Test Imago & Indigo
         run: |
-          docker run  --rm=true -d -p 8080:80 --name=indigo_service ghcr.io/${{ github.repository_owner }}/indigo-service:latest
+          docker run  --rm=true -p 8080:80 --name=indigo_service ghcr.io/${{ github.repository_owner }}/indigo-service:latest > logs.txt 2>&1
           sleep 10
-          docker logs indigo_service
+          cat logs.txt
           docker ps
           export INDIGO_SERVICE_URL=http://localhost:8080/v2
           python3 utils/indigo-service/backend/service/tests/api/imago_test.py
