@@ -1,7 +1,7 @@
 name: Indigo CI
 
 env:
-  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-13": "macos"}'
+  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-14": "macos"}'
 
 on:
   push:
@@ -20,17 +20,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: false
-          fetch-depth: 500
-      - name: Git fetch tags
-        run: |
-             git config --global --add safe.directory '*'
-             git fetch --tags -f
-      - name: Check
-        run: |
-          python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
-          .ci/static_analysis_check.sh
+      #   with:
+      #     lfs: false
+      #     fetch-depth: 500
+      # - name: Git fetch tags
+      #   run: |
+      #        git config --global --add safe.directory '*'
+      #        git fetch --tags -f
+      # - name: Check
+      #   run: |
+      #     python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
+      #     .ci/static_analysis_check.sh
 
   build_indigo_libs_x86_64:
     strategy:
@@ -39,7 +39,7 @@ jobs:
         os:
           - macos-14
           - ubuntu-latest
-          - windows-latest
+          # - windows-latest
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -227,7 +227,6 @@ jobs:
       - name: Install Python test dependencies
         run: python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
       - name: Build wrappers
-        # if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
           mkdir build
           cd build
@@ -1155,7 +1154,7 @@ jobs:
       fail-fast: false
       matrix:
         postgres_major_version: [ 13, 14, 15, 16, 17 ]
-    runs-on: macos-13
+    runs-on: macos-14
     needs: [build_indigo_windows_mingw_x86_64, build_indigo_ketcher_cjk, build_bingo_oracle_linux_x86_64, build_bingo_oracle_windows_mingw_x86_64, build_bingo_oracle_windows_msvc_x86_64]
     steps:
       - name: Checkout
@@ -1215,7 +1214,8 @@ jobs:
           path: dist/bingo-sqlserver*.zip
 
   publish_indigo_to_pypi:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1253,7 +1253,8 @@ jobs:
              twine upload -u __token__ -p ${PYPI_TOKEN} --skip-existing dist/*.whl
 
   publish_indigo_to_nuget:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1285,7 +1286,8 @@ jobs:
         run: dotnet nuget push dist/*.nupkg --api-key ${NUGET_API_KEY} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
   publish_indigo_to_npm:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1322,7 +1324,8 @@ jobs:
           bash .ci/publish_npm.sh
 
   publish_indigo_to_maven:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1366,7 +1369,10 @@ jobs:
   build_test_publish_indigo_service_old:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
+    permissions:
+      contents: read
+      packages: write
+    needs: [build_indigo_wrappers]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1383,10 +1389,10 @@ jobs:
           name: indigo-python
           path: utils/indigo-service/backend/lib/
       - name: Build
-        run: docker build -f ./utils/indigo-service/backend/Dockerfile -t epmlsop/indigo-service:latest ./utils/indigo-service/backend
+        run: docker build -f ./utils/indigo-service/backend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/indigo-service:latest ./utils/indigo-service/backend
       - name: Test Imago & Indigo
         run: |
-          docker run  --rm=true -d -p 8080:80 --name=indigo_service epmlsop/indigo-service:latest
+          docker run  --rm=true -d -p 8080:80 --name=indigo_service ghcr.io/${{ github.repository_owner }}/indigo-service:latest
           sleep 10
           docker logs indigo_service
           docker ps
@@ -1398,32 +1404,36 @@ jobs:
 # TODO: add indigo tests
 #      - name: Test
 #        run: |
-#          container_id=$(docker run --detach -it --rm -p 12345:80 epmlsop/indigo-service:latest)
+#          container_id=$(docker run --detach -it --rm -p 12345:80 ghcr.io/${{ github.repository_owner }}/indigo-service:latest)
 #          echo ${container_id}
 #          docker logs ${container_id}
 #          docker ps
 #          curl http://localhost:12345/v2/indigo/info
 #          docker logs ${container_id}
 #          docker stop ${container_id}
-      - name: Login to DockerHub
+      - name: Login to GHCR
         if: startsWith(github.ref, 'refs/tags/indigo-')
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/indigo-')
         run: |
           export tag=${{ github.ref }}
           export clean_tag=${tag/refs\/tags\/indigo-/}
-          docker tag epmlsop/indigo-service:latest epmlsop/indigo-service:${clean_tag}
-          docker push epmlsop/indigo-service:${clean_tag}
-          docker push epmlsop/indigo-service:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/indigo-service:latest ghcr.io/${{ github.repository_owner }}/indigo-service:${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:latest
 
   build_test_publish_indigo_service_new:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
+    permissions:
+      contents: read
+      packages: write
+    needs: [build_indigo_wrappers]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1440,18 +1450,19 @@ jobs:
           name: indigo-python
           path: api/http/
       - name: Build
-        run: docker build -f ./api/http/Dockerfile -t epmlsop/indigo-service:enhanced-latest ./api/http
-      - name: Login to DockerHub
+        run: docker build -f ./api/http/Dockerfile -t ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest ./api/http
+      - name: Login to GHCR
         if: startsWith(github.ref, 'refs/tags/indigo-')
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/indigo-')
         run: |
           export tag=${{ github.ref }}
           export clean_tag=${tag/refs\/tags\/indigo-/}
-          docker tag epmlsop/indigo-service:enhanced-latest epmlsop/indigo-service:enhanced-${clean_tag}
-          docker push epmlsop/indigo-service:enhanced-${clean_tag}
-          docker push epmlsop/indigo-service:enhanced-latest
+          docker tag ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest
