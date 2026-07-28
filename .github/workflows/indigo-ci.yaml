@@ -37,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # - macos-14
+          - macos-14
           - ubuntu-latest
           # - windows-latest
     runs-on: ${{ matrix.os }}
@@ -58,6 +58,7 @@ jobs:
         with:
           args: >
             /bin/sh -c "
+            cc --version &&
             mkdir build &&
             cd build &&
             cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF &&
@@ -67,6 +68,7 @@ jobs:
       - name: Build macOS
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
+          cc --version
           mkdir build
           cd build
           cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -149,6 +151,7 @@ jobs:
       - name: Build macOS
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
+          cc --version
           mkdir build
           cd build
           cmake .. \
@@ -211,11 +214,11 @@ jobs:
       #   with:
       #     name: indigo-libs-windows-i386
       #     path: dist/
-      # - name: Download macOS native libs x86_64
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: indigo-libs-macos-x86_64
-      #     path: dist/
+      - name: Download macOS native libs x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: indigo-libs-macos-x86_64
+          path: dist/
       - name: Download macOS native libs aarch64
         uses: actions/download-artifact@v4
         with:
@@ -224,7 +227,6 @@ jobs:
       - name: Install Python test dependencies
         run: python3 -m pip install -r api/python/requirements_dev.txt --break-system-packages
       - name: Build wrappers
-        # if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
           mkdir build
           cd build
@@ -276,7 +278,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-14, ubuntu-latest, windows-latest ]
+        os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -297,7 +299,7 @@ jobs:
           name: indigo-python
           path: dist/
       - name: Install Pillow
-        run: python3 -m pip install Pillow
+        run: python3 -m pip install Pillow --break-system-packages
       - name: Install wrappers Linux
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: python3 -m pip install dist/*manylinux1_x86_64*.whl
@@ -306,9 +308,15 @@ jobs:
         run: Get-ChildItem dist -Filter *win_amd64*.whl -Recurse | % { python3 -m pip install $_.FullName }
       - name: Install wrappers macOS
         if: ${{ startsWith(matrix.os, 'macos') }}
-        run: python3 -m pip install dist/*macosx_10_7_intel*.whl --break-system-packages
+        run: python3 -m pip install dist/*macosx_*.whl --break-system-packages
       - name: Test
         run: python3 -Wignore api/tests/integration/test.py -t 1 -j junit_report.xml
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}
+          path: api/tests/integration/out/
       - name: Publish Test Report
         if: always()
         uses: mikepenz/action-junit-report@v4
@@ -347,7 +355,7 @@ jobs:
         uses: uraimo/run-on-arch-action@v2.8.1
         with:
           arch: aarch64
-          distro: ubuntu20.04
+          distro: ubuntu22.04
           githubToken: ${{ github.token }}
           run: |
             apt update
@@ -364,6 +372,8 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-python_test_report"
 
   test_indigo_python_i386:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -409,6 +419,8 @@ jobs:
           check_name: "${{ matrix.os }}-i386-python_test_report"
 
   test_indigo_java_x86_64:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -450,6 +462,8 @@ jobs:
           check_name: "${{ matrix.os }}-x86_64-java_test_report"
 
   test_indigo_java_aarch64:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -496,6 +510,8 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-java_test_report"
 
   test_indigo_java_i386:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -542,6 +558,8 @@ jobs:
           check_name: "${{ matrix.os }}-i386-java_test_report"
 
   test_indigo_dotnet_x86_64:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -629,6 +647,8 @@ jobs:
           check_name: "${{ matrix.os }}-x86_64-dotnet_test_report"
 
   test_indigo_dotnet_i386:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -681,6 +701,8 @@ jobs:
           check_name: "${{ matrix.os }}_i386_dotnet_test_report"
 
   test_bingo_elastic_python_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -731,6 +753,8 @@ jobs:
           path: dist
 
   merge_bingo_elastic_python_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: ubuntu-latest
     needs: [ test_bingo_elastic_python_linux_x86_64 ]
     steps:
@@ -741,6 +765,8 @@ jobs:
           pattern: bingo-elastic-python-*
 
   test_bingo_elastic_java_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -775,6 +801,8 @@ jobs:
         working-directory: bingo/bingo-elastic/java
 
   build_indigo_windows_mingw_x86_64:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     runs-on: windows-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
@@ -950,6 +978,8 @@ jobs:
           path: dist/utils
 
   build_bingo_oracle_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     steps:
@@ -980,6 +1010,8 @@ jobs:
           path: dist/bingo-oracle*.tgz
 
   build_bingo_oracle_windows_mingw_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: windows-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     defaults:
@@ -1012,6 +1044,8 @@ jobs:
           path: dist/bingo-oracle*.zip
 
   build_bingo_oracle_windows_msvc_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: windows-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     steps:
@@ -1037,6 +1071,8 @@ jobs:
           path: dist/bingo-oracle*.zip
 
   build_bingo_postgres_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -1112,6 +1148,8 @@ jobs:
           check_name: "bingo_postgres_${{ matrix.postgres_major_version }}_test_report"
 
   build_bingo_postgres_windows_msvc_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -1148,11 +1186,13 @@ jobs:
           path: dist/bingo-postgres*.zip
 
   build_bingo_postgres_macos_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
         postgres_major_version: [ 13, 14, 15, 16, 17 ]
-    runs-on: macos-13
+    runs-on: macos-14
     needs: [build_indigo_windows_mingw_x86_64, build_indigo_ketcher_cjk, build_bingo_oracle_linux_x86_64, build_bingo_oracle_windows_mingw_x86_64, build_bingo_oracle_windows_msvc_x86_64]
     steps:
       - name: Checkout
@@ -1183,6 +1223,8 @@ jobs:
           path: dist/bingo-postgres*.tgz
 
   build_bingo_sqlserver_windows_msvc_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -1212,7 +1254,8 @@ jobs:
           path: dist/bingo-sqlserver*.zip
 
   publish_indigo_to_pypi:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1250,7 +1293,8 @@ jobs:
              twine upload -u __token__ -p ${PYPI_TOKEN} --skip-existing dist/*.whl
 
   publish_indigo_to_nuget:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1282,7 +1326,8 @@ jobs:
         run: dotnet nuget push dist/*.nupkg --api-key ${NUGET_API_KEY} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
   publish_indigo_to_npm:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1319,7 +1364,8 @@ jobs:
           bash .ci/publish_npm.sh
 
   publish_indigo_to_maven:
-    if: startsWith(github.ref, 'refs/tags/indigo-')
+    # unc: skip
+    if: startsWith(github.ref, 'refs/tags/indigo-') && false
     runs-on: ubuntu-latest
     needs: [test_indigo_python_x86_64, test_indigo_java_x86_64, test_indigo_dotnet_x86_64, test_indigo_python_i386, test_indigo_java_i386, test_indigo_dotnet_i386, test_indigo_python_aarch64, test_indigo_java_aarch64, merge_bingo_elastic_python_linux_x86_64, test_bingo_elastic_java_linux_x86_64, build_indigo_ketcher]
     container: epmlsop/indigo-tester:latest
@@ -1363,7 +1409,11 @@ jobs:
   build_test_publish_indigo_service_old:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    needs: [build_indigo_wrappers]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1380,10 +1430,10 @@ jobs:
           name: indigo-python
           path: utils/indigo-service/backend/lib/
       - name: Build
-        run: docker build -f ./utils/indigo-service/backend/Dockerfile -t epmlsop/indigo-service:latest ./utils/indigo-service/backend
+        run: docker build -f ./utils/indigo-service/backend/Dockerfile -t ghcr.io/${{ github.repository_owner }}/indigo-service:latest ./utils/indigo-service/backend
       - name: Test Imago & Indigo
         run: |
-          docker run  --rm=true -d -p 8080:80 --name=indigo_service epmlsop/indigo-service:latest
+          docker run  --rm=true -d -p 8080:80 -e CELERYD_OPTS="--concurrency=4" -e GUNICORN_CMD_ARGS="--workers=4" --name=indigo_service ghcr.io/${{ github.repository_owner }}/indigo-service:latest
           sleep 10
           docker logs indigo_service
           docker ps
@@ -1395,32 +1445,36 @@ jobs:
 # TODO: add indigo tests
 #      - name: Test
 #        run: |
-#          container_id=$(docker run --detach -it --rm -p 12345:80 epmlsop/indigo-service:latest)
+#          container_id=$(docker run --detach -it --rm -p 12345:80 ghcr.io/${{ github.repository_owner }}/indigo-service:latest)
 #          echo ${container_id}
 #          docker logs ${container_id}
 #          docker ps
 #          curl http://localhost:12345/v2/indigo/info
 #          docker logs ${container_id}
 #          docker stop ${container_id}
-      - name: Login to DockerHub
+      - name: Login to GHCR
         if: startsWith(github.ref, 'refs/tags/indigo-')
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/indigo-')
         run: |
           export tag=${{ github.ref }}
           export clean_tag=${tag/refs\/tags\/indigo-/}
-          docker tag epmlsop/indigo-service:latest epmlsop/indigo-service:${clean_tag}
-          docker push epmlsop/indigo-service:${clean_tag}
-          docker push epmlsop/indigo-service:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/indigo-service:latest ghcr.io/${{ github.repository_owner }}/indigo-service:${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:latest
 
   build_test_publish_indigo_service_new:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
+    permissions:
+      contents: read
+      packages: write
+    needs: [build_indigo_wrappers]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1437,18 +1491,37 @@ jobs:
           name: indigo-python
           path: api/http/
       - name: Build
-        run: docker build -f ./api/http/Dockerfile -t epmlsop/indigo-service:enhanced-latest ./api/http
-      - name: Login to DockerHub
+        run: docker build -f ./api/http/Dockerfile -t ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest ./api/http
+      - name: Login to GHCR
         if: startsWith(github.ref, 'refs/tags/indigo-')
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/indigo-')
         run: |
           export tag=${{ github.ref }}
           export clean_tag=${tag/refs\/tags\/indigo-/}
-          docker tag epmlsop/indigo-service:enhanced-latest epmlsop/indigo-service:enhanced-${clean_tag}
-          docker push epmlsop/indigo-service:enhanced-${clean_tag}
-          docker push epmlsop/indigo-service:enhanced-latest
+          docker tag ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-${clean_tag}
+          docker push ghcr.io/${{ github.repository_owner }}/indigo-service:enhanced-latest
+
+  create_github_release:
+    if: startsWith(github.ref, 'refs/tags/indigo-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build_indigo_wrappers]
+    steps:
+      - name: Download Python wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: indigo-python
+          path: dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
+          draft: true

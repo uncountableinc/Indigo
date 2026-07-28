@@ -61,9 +61,9 @@
               venvShellHook
               pip
 
-              llvmPackages_17.clang-tools
-              llvmPackages_17.libcxxClang
-              lldb_17
+              llvmPackages_15.clang-tools
+              llvmPackages_15.libcxxClang
+              lldb_15
               cmake
             ];
           };
