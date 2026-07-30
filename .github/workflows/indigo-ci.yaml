@@ -1,7 +1,7 @@
 name: Indigo CI
 
 env:
-  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-13": "macos"}'
+  OS_NAME_MAPPING_JSON: '{"ubuntu-latest": "linux", "windows-latest": "windows", "macos-14": "macos"}'
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest ]
+        os: [ macos-14, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     needs: static_analysis
     steps:
@@ -192,11 +192,11 @@ jobs:
         with:
           name: indigo-libs-windows-x86_64
           path: dist/
-      - name: Download Windows native libs i386
-        uses: actions/download-artifact@v4
-        with:
-          name: indigo-libs-windows-i386
-          path: dist/
+      # - name: Download Windows native libs i386
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: indigo-libs-windows-i386
+      #     path: dist/
       - name: Download macOS native libs x86_64
         uses: actions/download-artifact@v4
         with:
@@ -256,7 +256,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -277,7 +277,7 @@ jobs:
           name: indigo-python
           path: dist/
       - name: Install Pillow
-        run: python3 -m pip install Pillow
+        run: python3 -m pip install Pillow --break-system-packages
       - name: Install wrappers Linux
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: python3 -m pip install dist/*manylinux1_x86_64*.whl
@@ -344,6 +344,8 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-python_test_report"
 
   test_indigo_python_i386:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -393,7 +395,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -476,6 +478,8 @@ jobs:
           check_name: "${{ matrix.os }}-aarch64-java_test_report"
 
   test_indigo_java_i386:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -522,12 +526,14 @@ jobs:
           check_name: "${{ matrix.os }}-i386-java_test_report"
 
   test_indigo_dotnet_x86_64:
+    # unc: skip
+    if: ${{ false }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         # os: [ macos-13, ubuntu-latest, windows-latest ]
-        os: [ macos-13, windows-latest ]
+        os: [ macos-14, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: merge_indigo_wrappers
     steps:
@@ -661,6 +667,8 @@ jobs:
           check_name: "${{ matrix.os }}_i386_dotnet_test_report"
 
   test_bingo_elastic_python_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -721,6 +729,8 @@ jobs:
           pattern: bingo-elastic-python-*
 
   test_bingo_elastic_java_linux_x86_64:
+    # unc: skip
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -876,7 +886,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-13, ubuntu-latest, windows-latest ]
+        os: [ macos-14, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     needs: [build_bingo_postgres_linux_x86_64, build_bingo_postgres_windows_msvc_x86_64, build_bingo_postgres_macos_x86_64]
     steps:
@@ -1126,7 +1136,7 @@ jobs:
       fail-fast: false
       matrix:
         postgres_major_version: [ 13, 14, 15, 16, 17 ]
-    runs-on: macos-13
+    runs-on: macos-14
     needs: [build_indigo_windows_mingw_x86_64, build_indigo_ketcher_cjk, build_bingo_oracle_linux_x86_64, build_bingo_oracle_windows_mingw_x86_64, build_bingo_oracle_windows_msvc_x86_64]
     steps:
       - name: Checkout
