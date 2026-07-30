@@ -571,15 +571,6 @@ void MoleculeCdxmlLoader::_parseCollections(BaseMolecule& mol)
         }
     }
 
-    // Do not drop inner bonds of collapsed fragments. Position collapse puts
-    // every inner atom on the parent node's page position, which makes these
-    // bonds zero-length; an earlier filter deleted them to avoid skewing
-    // Ketcher's average-bond-length scaling. But those are real chemical bonds
-    // (e.g. the benzene ring inside a "Benzene" nickname, or B-OH inside a
-    // B(OH)2 substituent), so dropping them corrupts the molecule — benzene
-    // loads as methane, phenylboronic acid as C6H11BO2 instead of C6H7BO2.
-    // The scaling skew is cosmetic and the position collapse already handles
-    // the text distortion; data integrity wins, so keep every bond.
     for (const auto& bond : bonds)
     {
         _checkFragmentConnection(bond.be.first, bond.id);
@@ -841,27 +832,12 @@ void MoleculeCdxmlLoader::_parseCDXMLElements(BaseCDXElement& first_elem, bool n
             _parseCDXMLElements(*elem.firstChildElement(), false, true);
             auto inner_idx_end = nodes.size();
             CdxmlNode& fragment_node = nodes[inner_idx_start - 1];
-            // Inner atom coords are from the hidden/expanded structure, in a
-            // different origin than the page. Anchor the fragment at the parent
-            // node's page position while PRESERVING its relative geometry: shift
-            // every inner atom by (parent - inner centroid). Collapsing them all
-            // onto the parent point (the old behavior) destroyed the shape, so a
-            // collapsed "Benzene" nickname became six coincident atoms that
-            // Ketcher could not lay out (rendered as an empty box). Translating
-            // keeps the real hexagon and still anchors it where the nickname sits.
-            Vec3f centroid;
-            const auto inner_count = inner_idx_end - inner_idx_start;
-            for (auto i = inner_idx_start; i < inner_idx_end; ++i)
-                centroid.add(nodes[i].pos);
-            if (inner_count > 0)
-                centroid.scale(1.0f / static_cast<float>(inner_count));
-            Vec3f offset;
-            offset.diff(fragment_node.pos, centroid);
             for (auto i = inner_idx_start; i < inner_idx_end; ++i)
             {
                 auto it = std::upper_bound(fragment_node.inner_nodes.cbegin(), fragment_node.inner_nodes.cend(), fragment_node.id,
                                            [](int a, int b) { return a > b; });
-                nodes[i].pos.add(offset);
+                if (nodes[i].pos.x == 0 && nodes[i].pos.y == 0) // if no coord - copy from parent
+                    nodes[i].pos = fragment_node.pos;
                 fragment_node.inner_nodes.insert(it, nodes[i].id);
             }
         }

@@ -504,7 +504,7 @@ void MoleculeLayout::_updateRepeatingUnits()
     for (int i = _molecule.sgroups.begin(); i != _molecule.sgroups.end(); i = _molecule.sgroups.next(i))
     {
         SGroup& sg = _molecule.sgroups.getSGroup(i);
-        if (sg.sgroup_type == SGroup::SG_TYPE_SRU || sg.sgroup_type == SGroup::SG_TYPE_COP)
+        if (sg.sgroup_type == SGroup::SG_TYPE_SRU)
         {
             RepeatingUnit& ru = (RepeatingUnit&)sg;
             crossBonds.clear();
