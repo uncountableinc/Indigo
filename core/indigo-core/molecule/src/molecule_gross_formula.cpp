@@ -176,7 +176,6 @@ std::unique_ptr<GROSS_UNITS> MoleculeGrossFormula::collect(BaseMolecule& mol, bo
     {
         auto& unit = gross[i];
 
-        unit.isotopes = std::map<int, int>();
         unit.multiplier.copy(indices[i]);
 
         for (int j = 0; j < filters[i].size(); j++)

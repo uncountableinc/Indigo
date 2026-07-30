@@ -80,6 +80,16 @@
                     0.0,
                     1.6000003814697266,
                     0.0
+                ],
+                "attachmentOrder": [
+                    {
+                        "attachmentAtom": 6,
+                        "attachmentId": 0
+                    },
+                    {
+                        "attachmentAtom": 2,
+                        "attachmentId": 1
+                    }
                 ]
             },
             {
