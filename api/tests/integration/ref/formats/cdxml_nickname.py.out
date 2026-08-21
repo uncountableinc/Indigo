@@ -1,3 +1,10 @@
 *** CDXML collapsed nickname fragments ***
 Benzene.cdxml
   component 0: atoms=6 bonds=6 formula=C6 H6 distinct_positions=6
+    sgroup Benzene expanded=False first=(-0.439, -0.478) centroid=(-0.024, -0.239)
+Nickname_BugClean.cdxml
+  arrow_center_x=2.708
+  reactant 0: atoms=5 bonds=5 formula=C5 H6 distinct_positions=5
+  product 1: atoms=6 bonds=6 formula=C6 H6 distinct_positions=6
+  catalyst 2: atoms=4 bonds=3 formula=C3 H8 O distinct_positions=4
+    sgroup IPA expanded=False first=(2.341, -1.058) centroid=(2.341, -1.058) left

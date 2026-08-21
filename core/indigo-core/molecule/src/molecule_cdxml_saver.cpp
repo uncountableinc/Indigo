@@ -1134,17 +1134,21 @@ void MoleculeCdxmlSaver::addFragmentNodes(BaseMolecule& mol, tinyxml2::XMLElemen
         {
             XMLElement* t = _doc->NewElement("t");
             node->LinkEndChild(t);
-            Vec2f pos(sa.display_position.x + offset.x, -sa.display_position.y - offset.y);
+            Vec3f display = sa.display_position;
+            if (display.x == 0.0f && display.y == 0.0f && sa.atoms.size() > 0)
+                display.copy(mol.getAtomXyz(sa.atoms[0]));
+            Vec2f pos(display.x + offset.x, -display.y - offset.y);
             pos.scale(_bond_length);
             Vec2f v1(pos.x - _bond_length / 2, pos.y - _bond_length / 2);
             Vec2f v2(pos.x + _bond_length / 2, pos.y + _bond_length / 2);
             std::string pos_str = std::to_string(pos.x) + " " + std::to_string(pos.y);
             Rect2f bbox(v1, v2);
             std::string bbox_str = boundingBoxToString(bbox);
-            if (sa.display_position.x != 0.0f && sa.display_position.y != 0.0f)
-                node->SetAttribute("p", pos_str.c_str());
+            node->SetAttribute("p", pos_str.c_str());
+            t->SetAttribute("p", pos_str.c_str());
+            t->SetAttribute("BoundingBox", bbox_str.c_str());
             t->SetAttribute("LabelJustification", "Left");
-            t->SetAttribute("LabelAlignment", "Above");
+            t->SetAttribute("LabelAlignment", "Left");
             XMLElement* s = _doc->NewElement("s");
             t->LinkEndChild(s);
             XMLText* txt = _doc->NewText(sa.subscript.ptr());

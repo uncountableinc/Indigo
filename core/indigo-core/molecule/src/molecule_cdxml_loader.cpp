@@ -20,6 +20,8 @@
 #include "lzw/lzw_decoder.h"
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
+#include <limits>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
@@ -34,6 +36,58 @@
 using namespace indigo;
 using namespace tinyxml2;
 using namespace rapidjson;
+
+namespace
+{
+
+CdxmlBracket* matchingSuperatomBracket(std::vector<CdxmlBracket>& brackets, const std::vector<CdxmlNode>& nodes, size_t inner_idx_start, size_t inner_idx_end)
+{
+    for (auto it = brackets.rbegin(); it != brackets.rend(); ++it)
+    {
+        if (!it->is_superatom)
+            continue;
+        for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+        {
+            const int node_id = nodes[i].id;
+            for (const auto& bracket_id : it->bracketed_list)
+            {
+                if (static_cast<int>(bracket_id) == node_id)
+                    return &(*it);
+            }
+        }
+    }
+    return nullptr;
+}
+
+void rotateClosestAtomToFront(CdxmlBracket& bracket, const std::vector<CdxmlNode>& nodes, size_t inner_idx_start, size_t inner_idx_end, const Vec3f& anchor)
+{
+    if (bracket.bracketed_list.size() < 2)
+        return;
+    size_t best = 0;
+    float best_d = std::numeric_limits<float>::max();
+    for (size_t bi = 0; bi < bracket.bracketed_list.size(); ++bi)
+    {
+        const int nid = bracket.bracketed_list[bi];
+        for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+        {
+            if (static_cast<int>(nodes[i].id) != nid)
+                continue;
+            Vec3f d;
+            d.diff(nodes[i].pos, anchor);
+            const float ds = d.lengthSqr();
+            if (ds < best_d)
+            {
+                best_d = ds;
+                best = bi;
+            }
+            break;
+        }
+    }
+    if (best != 0)
+        std::rotate(bracket.bracketed_list.begin(), bracket.bracketed_list.begin() + static_cast<std::ptrdiff_t>(best), bracket.bracketed_list.end());
+}
+
+} // namespace
 
 bool is_fragment(CdxmlNode& node)
 {
@@ -571,15 +625,11 @@ void MoleculeCdxmlLoader::_parseCollections(BaseMolecule& mol)
         }
     }
 
-    // Do not drop inner bonds of collapsed fragments. Position collapse puts
-    // every inner atom on the parent node's page position, which makes these
-    // bonds zero-length; an earlier filter deleted them to avoid skewing
-    // Ketcher's average-bond-length scaling. But those are real chemical bonds
-    // (e.g. the benzene ring inside a "Benzene" nickname, or B-OH inside a
-    // B(OH)2 substituent), so dropping them corrupts the molecule — benzene
-    // loads as methane, phenylboronic acid as C6H11BO2 instead of C6H7BO2.
-    // The scaling skew is cosmetic and the position collapse already handles
-    // the text distortion; data integrity wins, so keep every bond.
+    // Do not drop inner bonds of collapsed fragments. Inner atoms keep their
+    // relative geometry (translated onto the fragment). An earlier filter
+    // deleted zero-length bonds after the old collapse-to-one-point behavior;
+    // those are real chemical bonds, so dropping them corrupts the molecule
+    // (benzene as methane, phenylboronic acid as C6H11BO2 instead of C6H7BO2).
     for (const auto& bond : bonds)
     {
         _checkFragmentConnection(bond.be.first, bond.id);
@@ -842,27 +892,42 @@ void MoleculeCdxmlLoader::_parseCDXMLElements(BaseCDXElement& first_elem, bool n
             auto inner_idx_end = nodes.size();
             CdxmlNode& fragment_node = nodes[inner_idx_start - 1];
             // Inner atom coords are from the hidden/expanded structure, in a
-            // different origin than the page. Anchor the fragment at the parent
-            // node's page position while PRESERVING its relative geometry: shift
-            // every inner atom by (parent - inner centroid). Collapsing them all
-            // onto the parent point (the old behavior) destroyed the shape, so a
-            // collapsed "Benzene" nickname became six coincident atoms that
-            // Ketcher could not lay out (rendered as an empty box). Translating
-            // keeps the real hexagon and still anchors it where the nickname sits.
-            Vec3f centroid;
-            const auto inner_count = inner_idx_end - inner_idx_start;
-            for (auto i = inner_idx_start; i < inner_idx_end; ++i)
-                centroid.add(nodes[i].pos);
-            if (inner_count > 0)
-                centroid.scale(1.0f / static_cast<float>(inner_count));
-            Vec3f offset;
-            offset.diff(fragment_node.pos, centroid);
-            for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+            // different origin than the page. Shift every inner atom by
+            // (anchor - inner centroid) so relative geometry is preserved.
+            // Collapsing them onto one point destroyed the shape (MAT-77592).
+            // Nicknames (NodeType=Nickname) sit on the visible <t p>.
+            // Fragments (H2SO4, MeOH, Pd(PPh3)4) sit on the parent-node p.
+            // Translating Fragments onto <t p> moves sample.cdxml's MeOH,
+            // whose expanded atoms are stored off the page like Pd.
+            // Ketcher CDXML export often omits p on the Fragment node and
+            // its <t> while leaving inner atoms at the page position the
+            // user dragged. Treating that missing p as (0,0) smashed those
+            // labels to the origin.
+            CdxmlBracket* nickname_bracket = matchingSuperatomBracket(brackets, nodes, inner_idx_start, inner_idx_end);
+            if (inner_idx_start < inner_idx_end)
             {
-                auto it = std::upper_bound(fragment_node.inner_nodes.cbegin(), fragment_node.inner_nodes.cend(), fragment_node.id,
-                                           [](int a, int b) { return a > b; });
-                nodes[i].pos.add(offset);
-                fragment_node.inner_nodes.insert(it, nodes[i].id);
+                Vec3f centroid;
+                const auto inner_count = inner_idx_end - inner_idx_start;
+                for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+                    centroid.add(nodes[i].pos);
+                centroid.scale(1.0f / static_cast<float>(inner_count));
+                Vec3f anchor = centroid;
+                const bool is_nickname = fragment_node.type == kCDXNodeType_Nickname;
+                if (is_nickname && nickname_bracket != nullptr && nickname_bracket->has_superatom_position)
+                    anchor.copy(nickname_bracket->superatom_position);
+                else if (fragment_node.has_pos)
+                    anchor.copy(fragment_node.pos);
+                Vec3f offset;
+                offset.diff(anchor, centroid);
+                for (auto i = inner_idx_start; i < inner_idx_end; ++i)
+                {
+                    auto it = std::upper_bound(fragment_node.inner_nodes.cbegin(), fragment_node.inner_nodes.cend(), fragment_node.id,
+                                               [](int a, int b) { return a > b; });
+                    nodes[i].pos.add(offset);
+                    fragment_node.inner_nodes.insert(it, nodes[i].id);
+                }
+                if (nickname_bracket != nullptr)
+                    rotateClosestAtomToFront(*nickname_bracket, nodes, inner_idx_start, inner_idx_end, anchor);
             }
         }
     };
@@ -902,11 +967,29 @@ void MoleculeCdxmlLoader::_parseCDXMLElements(BaseCDXElement& first_elem, bool n
                 }
             }
             _parseLabel(elem, bracket.label);
-            if (fragment_start_idx > 0 && fragment_start_idx - 1 < static_cast<int>(nodes.size()))
+            Vec3f text_pos;
+            bool has_text_pos = false;
+            auto capture_pos = posLambda(text_pos);
+            std::unordered_map<std::string, std::function<void(const std::string&)>> text_pos_dispatcher = {
+                {"p",
+                 [&](const std::string& data) {
+                     capture_pos(data);
+                     has_text_pos = true;
+                 }},
+                {"xyz",
+                 [&](const std::string& data) {
+                     capture_pos(data);
+                     has_text_pos = true;
+                 }},
+            };
+            applyDispatcher(*elem.firstProperty().get(), text_pos_dispatcher);
+            if (has_text_pos)
             {
-                auto parentNode = this->nodes[fragment_start_idx - 1];
-                bracket.superatom_position.copy(parentNode.pos);
+                bracket.superatom_position.copy(text_pos);
+                bracket.has_superatom_position = true;
             }
+            else if (fragment_start_idx > 0 && fragment_start_idx - 1 < static_cast<int>(nodes.size()))
+                bracket.superatom_position.copy(this->nodes[fragment_start_idx - 1].pos);
             brackets.push_back(bracket);
         }
         else
@@ -1396,11 +1479,15 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
 
     auto geometry_lambda = [&node](const std::string& data) { node.geometry = KGeometryTypeNameToInt.at(data); };
     auto enhanced_stereo_type_lambda = [&node](const std::string& data) { node.enchanced_stereo = kCDXEnhancedStereoStrToID.at(data); };
+    auto node_pos_lambda = [this, &node](const std::string& data) {
+        posLambda(node.pos)(data);
+        node.has_pos = true;
+    };
 
     std::unordered_map<std::string, std::function<void(const std::string&)>> node_dispatcher = {
         {"id", intLambda(node.id)},
-        {"p", posLambda(node.pos)},
-        {"xyz", posLambda(node.pos)},
+        {"p", node_pos_lambda},
+        {"xyz", node_pos_lambda},
         {"NumHydrogens", intLambda(node.hydrogens)},
         {"Charge", intLambda(node.charge)},
         {"Isotope", intLambda(node.isotope)},

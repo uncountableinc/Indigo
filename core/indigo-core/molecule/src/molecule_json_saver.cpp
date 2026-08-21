@@ -348,10 +348,10 @@ void MoleculeJsonSaver::saveSGroup(SGroup& sgroup, JsonWriter& writer)
         Superatom& sa = (Superatom&)sgroup;
         writer.Key("name");
         writer.String(sa.subscript.size() ? sa.subscript.ptr() : "");
-        if (sa.contracted == DisplayOption::Expanded)
+        if (sa.contracted != DisplayOption::Undefined)
         {
             writer.Key("expanded");
-            writer.Bool(true);
+            writer.Bool(sa.contracted == DisplayOption::Expanded);
         }
 
         if (sa.sa_class.size())

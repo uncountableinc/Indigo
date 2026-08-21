@@ -15,15 +15,176 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  ***************************************************************************/
+#include <limits>
 #include <numeric>
 #include <queue>
+#include <unordered_set>
 
 #include "layout/pathway_layout.h"
+#include "molecule/base_molecule.h"
+#include "molecule/molecule_sgroups.h"
 #include "reaction/pathway_reaction.h"
 #include "reaction/reaction.h"
 #include "reaction/reaction_multistep_detector.h"
 
 using namespace indigo;
+
+namespace
+{
+
+void collectLayoutPoints(BaseMolecule& mol, std::vector<Vec2f>& points)
+{
+    std::unordered_set<int> hidden;
+    for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
+    {
+        SGroup& sg = mol.sgroups.getSGroup(i);
+        if (sg.sgroup_type != SGroup::SG_TYPE_SUP)
+            continue;
+        if (sg.contracted != DisplayOption::Contracted)
+            continue;
+        if (sg.atoms.size() == 0)
+            continue;
+        Superatom& sa = (Superatom&)sg;
+        if (sa.display_position.x != 0.0f || sa.display_position.y != 0.0f)
+            points.emplace_back(sa.display_position.x, sa.display_position.y);
+        else
+        {
+            // A KET round-trip does not carry display_position, so this is the
+            // usual path on Update. The label is drawn at the group's centre,
+            // and atoms[0] is an arbitrary ligand atom that can land on the far
+            // side of an arrow end and flip the component's role (MAT-77406).
+            Vec2f centre;
+            for (int j = 0; j < sg.atoms.size(); ++j)
+            {
+                const Vec3f& xyz = mol.getAtomXyz(sg.atoms[j]);
+                centre.add(Vec2f(xyz.x, xyz.y));
+            }
+            centre.scale(1.0f / static_cast<float>(sg.atoms.size()));
+            points.emplace_back(centre);
+        }
+        for (int j = 0; j < sg.atoms.size(); ++j)
+            hidden.insert(sg.atoms[j]);
+    }
+    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    {
+        if (hidden.find(idx) != hidden.end())
+            continue;
+        const Vec3f& xyz = mol.getAtomXyz(idx);
+        points.emplace_back(xyz.x, xyz.y);
+    }
+}
+
+void getLayoutBoundingBox(BaseMolecule& mol, Rect2f& bbox, const Vec2f& minbox)
+{
+    std::vector<Vec2f> points;
+    collectLayoutPoints(mol, points);
+    if (points.empty())
+    {
+        mol.getBoundingBox(bbox, minbox);
+        return;
+    }
+    Vec2f a = points.front();
+    Vec2f b = points.front();
+    for (const auto& p : points)
+    {
+        a.min(p);
+        b.max(p);
+    }
+    bbox = Rect2f(a, b);
+    if (bbox.width() < minbox.x || bbox.height() < minbox.y)
+    {
+        Vec2f center(bbox.center());
+        const auto half_width = std::max(bbox.width() / 2, minbox.x / 2);
+        const auto half_height = std::max(bbox.height() / 2, minbox.y / 2);
+        bbox = Rect2f(Vec2f(center.x - half_width, center.y - half_height), Vec2f(center.x + half_width, center.y + half_height));
+    }
+}
+
+void layoutHullFromMolecule(BaseMolecule& mol, std::vector<Vec2f>& hull, const Vec2f& minbox)
+{
+    Rect2f bbox;
+    getLayoutBoundingBox(mol, bbox, minbox);
+    hull.push_back(bbox.leftTop());
+    hull.push_back(bbox.leftBottom());
+    hull.push_back(bbox.rightBottom());
+    hull.push_back(bbox.rightTop());
+    hull.push_back(bbox.leftTop());
+}
+
+bool isFullyContractedSuperatom(BaseMolecule& mol)
+{
+    std::unordered_set<int> hidden;
+    int contracted_superatoms = 0;
+    for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
+    {
+        SGroup& sg = mol.sgroups.getSGroup(i);
+        if (sg.sgroup_type != SGroup::SG_TYPE_SUP)
+            continue;
+        if (sg.contracted != DisplayOption::Contracted)
+            continue;
+        if (sg.atoms.size() == 0)
+            continue;
+        contracted_superatoms += 1;
+        for (int j = 0; j < sg.atoms.size(); ++j)
+            hidden.insert(sg.atoms[j]);
+    }
+    if (contracted_superatoms == 0)
+        return false;
+    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    {
+        if (hidden.find(idx) == hidden.end())
+            return false;
+    }
+    return mol.vertexCount() > 0;
+}
+
+int layoutSideForArrow(BaseMolecule& mol, const ReactionArrowObject& arrow)
+{
+    std::vector<Vec2f> points;
+    collectLayoutPoints(mol, points);
+    if (points.empty())
+        return -1;
+    Vec2f center(0, 0);
+    for (const auto& point : points)
+    {
+        center.x += point.x;
+        center.y += point.y;
+    }
+    center.x /= static_cast<float>(points.size());
+    center.y /= static_cast<float>(points.size());
+    const bool reverse = arrow.getArrowType() == ReactionArrowObject::ERetrosynthetic;
+    return reverse ? getPointSide(center, arrow.getHead(), arrow.getTail()) : getPointSide(center, arrow.getTail(), arrow.getHead());
+}
+
+int nearestArrowLayoutSide(BaseMolecule& mol, BaseMolecule& context)
+{
+    const int arrow_count = context.meta().getMetaCount(ReactionArrowObject::CID);
+    if (arrow_count == 0)
+        return -1;
+    Rect2f bbox;
+    getLayoutBoundingBox(mol, bbox, MIN_MOL_SIZE);
+    const Vec2f center = bbox.center();
+    int best_side = -1;
+    float best_distance = std::numeric_limits<float>::max();
+    for (int i = 0; i < arrow_count; ++i)
+    {
+        auto& arrow = (const ReactionArrowObject&)context.meta().getMetaObject(ReactionArrowObject::CID, i);
+        Vec2f mid((arrow.getTail().x + arrow.getHead().x) * 0.5f, (arrow.getTail().y + arrow.getHead().y) * 0.5f);
+        Vec2f delta;
+        delta.diff(center, mid);
+        const float distance = delta.length();
+        const int side = layoutSideForArrow(mol, arrow);
+        if (distance < best_distance)
+        {
+            best_distance = distance;
+            best_side = side;
+        }
+    }
+    return best_side;
+}
+
+} // namespace
+
 
 inline void merge_bbox(Rect2f& bb1, const Rect2f& bb2)
 {
@@ -61,7 +222,7 @@ void ReactionMultistepDetector::createSummBlocks()
     {
         Rect2f bbox;
         auto& comp = _merged_components[i];
-        comp.mol->getBoundingBox(bbox, MIN_MOL_SIZE);
+        getLayoutBoundingBox(*comp.mol, bbox, MIN_MOL_SIZE);
         mol_tops.emplace_back(bbox.top(), i);
         mol_bottoms.emplace_back(bbox.bottom(), i);
         mol_lefts.emplace_back(bbox.left(), i);
@@ -601,6 +762,14 @@ std::optional<std::pair<int, int>> ReactionMultistepDetector::isMergeable(size_t
     auto dist_it = mdi.distances_map.find(mol_idx2);
     if (dist_it != mdi.distances_map.end() && dist_it->second < LayoutOptions::DEFAULT_BOND_LENGTH * 2)
     {
+        if (_components[mol_idx1].mol && _components[mol_idx2].mol)
+        {
+            const int side1 = nearestArrowLayoutSide(*_components[mol_idx1].mol, _bmol);
+            const int side2 = nearestArrowLayoutSide(*_components[mol_idx2].mol, _bmol);
+            if (side1 >= 0 && side2 >= 0 && side1 != side2)
+                return std::nullopt;
+        }
+
         // collect surrounding zones for both molecules
         std::map<int, std::set<int>> other_zones1;
         std::map<int, std::set<int>> other_zones2;
@@ -749,15 +918,8 @@ ReactionMultistepDetector::ReactionType ReactionMultistepDetector::detectReactio
     for (int i = 0; i < _moleculeCount; ++i)
     {
         auto component = extractComponent(i);
-        Rect2f bbox;
-        component->getBoundingBox(bbox, Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
-        // auto hull = component->getConvexHull(Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
         std::vector<Vec2f> hull;
-        hull.push_back(bbox.leftTop());
-        hull.push_back(bbox.leftBottom());
-        hull.push_back(bbox.rightBottom());
-        hull.push_back(bbox.rightTop());
-        hull.push_back(bbox.leftTop());
+        layoutHullFromMolecule(*component, hull, Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
         _components.emplace_back(std::move(component), hull, i);
     }
 
@@ -792,6 +954,25 @@ bool ReactionMultistepDetector::mapReactionComponents()
             for (int index_cs = 0; index_cs < static_cast<int>(_component_summ_blocks.size()); ++index_cs)
             {
                 auto& csb = _component_summ_blocks[index_cs];
+                Vec2f this_mid((arr_begin.x + arr_end.x) * 0.5f, (arr_begin.y + arr_end.y) * 0.5f);
+                const float this_distance = csb.bbox.pointDistance(this_mid);
+                bool nearest_arrow = true;
+                for (int other_index = 0; other_index < arrow_count; ++other_index)
+                {
+                    if (other_index == reaction_index)
+                        continue;
+                    auto& other_arrow = (const ReactionArrowObject&)_bmol.meta().getMetaObject(ReactionArrowObject::CID, other_index);
+                    Vec2f other_mid((other_arrow.getTail().x + other_arrow.getHead().x) * 0.5f,
+                                    (other_arrow.getTail().y + other_arrow.getHead().y) * 0.5f);
+                    if (csb.bbox.pointDistance(other_mid) < this_distance)
+                    {
+                        nearest_arrow = false;
+                        break;
+                    }
+                }
+                if (!nearest_arrow)
+                    continue;
+
                 std::array<int, KProductArea + 1> sides{};
                 int side = -1;
                 for (auto rc_idx : csb.indexes)
@@ -802,8 +983,12 @@ bool ReactionMultistepDetector::mapReactionComponents()
                 }
 
                 std::vector<Vec2f> csb_bbox = {csb.bbox.leftTop(), csb.bbox.rightTop(), csb.bbox.rightBottom(), csb.bbox.leftBottom(), csb.bbox.leftTop()};
-                if (csb.bbox.rayIntersectsRect(arr_end, arr_begin) ||
-                    (arrow_count == 1 && side == KProductArea && convexPolygonsIntersect(csb_bbox, right_arrow_zone)))
+                if (side == KReagentUpArea || side == KReagentDownArea)
+                {
+                    csb.role = BaseReaction::CATALYST;
+                }
+                else if (csb.bbox.rayIntersectsRect(arr_end, arr_begin) ||
+                         (side == KProductArea && convexPolygonsIntersect(csb_bbox, right_arrow_zone)))
                 {
                     float dist = csb.bbox.pointDistance(arr_end);
                     if (min_dist_prod < 0 || dist < min_dist_prod)
@@ -813,7 +998,7 @@ bool ReactionMultistepDetector::mapReactionComponents()
                     }
                 }
                 else if (csb.bbox.rayIntersectsRect(arr_begin, arr_end) ||
-                         (arrow_count == 1 && side == KReactantArea && convexPolygonsIntersect(csb_bbox, left_arrow_zone)))
+                         (side == KReactantArea && convexPolygonsIntersect(csb_bbox, left_arrow_zone)))
                 {
                     float dist = csb.bbox.pointDistance(arr_begin);
                     if (min_dist_reac < 0 || dist < min_dist_reac)
@@ -1021,7 +1206,7 @@ void ReactionMultistepDetector::mergeUndefinedComponents()
         {
             auto& csb = _component_summ_blocks[rc.summ_block_idx];
             Rect2f bbox;
-            rc.molecule->getBoundingBox(bbox);
+            getLayoutBoundingBox(*rc.molecule, bbox, MIN_MOL_SIZE);
             if (csb.role == BaseReaction::UNDEFINED)
                 undef_component_bboxes.emplace_back(i, bbox);
             else
@@ -1065,20 +1250,27 @@ void ReactionMultistepDetector::mergeUndefinedComponents()
 
         // merge all merge_list_candidates
         std::unordered_set<size_t> undefs_delete;
-        has_merges = merge_list_candidates.size();
+        has_merges = false;
         for (auto& mc : merge_list_candidates)
         {
-            undefs_delete.emplace(mc.undef_idx);
             auto& undef_bbox = undef_component_bboxes[mc.undef_idx];
             auto& comp_bbox = component_bboxes[mc.comp_idx];
             auto& rc_undef = _reaction_components[undef_bbox.first];
             auto& rc_target = _reaction_components[comp_bbox.first];
             if (rc_undef.molecule && rc_target.molecule)
             {
+                if (isFullyContractedSuperatom(*rc_undef.molecule) || isFullyContractedSuperatom(*rc_target.molecule))
+                    continue;
+                const int undef_side = nearestArrowLayoutSide(*rc_undef.molecule, _bmol);
+                const int target_side = nearestArrowLayoutSide(*rc_target.molecule, _bmol);
+                if (undef_side >= 0 && target_side >= 0 && undef_side != target_side)
+                    continue;
                 rc_target.molecule->mergeWithMolecule(*rc_undef.molecule, nullptr, 0);
                 _components[undef_bbox.first].idx = _components[comp_bbox.first].idx;
                 rc_undef.molecule.reset();
                 comp_bbox.second.extend(undef_bbox.second);
+                undefs_delete.emplace(mc.undef_idx);
+                has_merges = true;
             }
         }
         size_t index = 0;
@@ -1459,10 +1651,10 @@ int ReactionMultistepDetector::getMoleculeSide(const ReactionArrowObject& arrow,
 {
     bool reverseReactionOrder = arrow.getArrowType() == ReactionArrowObject::ERetrosynthetic;
     bool has_element = false;
-    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    std::vector<Vec2f> points;
+    collectLayoutPoints(mol, points);
+    for (const auto& pt : points)
     {
-        Vec3f& pt3d = mol.getAtomXyz(idx);
-        Vec2f pt(pt3d.x, pt3d.y);
         int side = !reverseReactionOrder ? getPointSide(pt, arrow.getTail(), arrow.getHead()) : getPointSide(pt, arrow.getHead(), arrow.getTail());
         sides[side]++;
         has_element = true;
@@ -1539,7 +1731,9 @@ void ReactionMultistepDetector::constructSimpleArrowReaction(BaseReaction& rxn)
                 }
             }
             break;
-            // undefined components are not allowed
+            // Leftovers: place by the contracted-label side. vertexCount vs
+            // layout-point counts used to leave contracted nicknames undefined
+            // (IPA below the arrow disappeared on Update, MAT-77406).
             case BaseReaction::UNDEFINED: {
                 for (auto idx : csb.indexes)
                 {
@@ -1548,11 +1742,12 @@ void ReactionMultistepDetector::constructSimpleArrowReaction(BaseReaction& rxn)
                     {
                         std::array<int, KProductArea + 1> sides{};
                         auto side = getMoleculeSide(arrow, *rc.molecule, sides);
-                        int rem_up_count = rc.molecule->vertexCount() - sides[KReagentUpArea];
-                        int rem_down_count = rc.molecule->vertexCount() - sides[KReagentDownArea];
-
-                        if (side > -1 && (sides[KReagentUpArea] > rem_up_count || sides[KReagentDownArea] > rem_down_count))
+                        if (side == KReagentUpArea || side == KReagentDownArea)
                             rxn.addCatalystCopy(*rc.molecule, 0, 0);
+                        else if (side == KReactantArea)
+                            rxn.addReactantCopy(*rc.molecule, 0, 0);
+                        else if (side == KProductArea)
+                            rxn.addProductCopy(*rc.molecule, 0, 0);
                         else
                             rxn.addUndefinedCopy(*rc.molecule, 0, 0);
                     }

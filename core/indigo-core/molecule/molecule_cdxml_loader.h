@@ -115,7 +115,7 @@ namespace indigo
     {
         CdxmlNode()
             : element(ELEM_C), type(kCDXNodeType_Element), enchanced_stereo(EnhancedStereoType::UNSPECIFIED), is_not_list(false),
-              has_fragment(false) // Carbon by default
+              has_fragment(false), has_pos(false) // Carbon by default
         {
         }
 
@@ -139,6 +139,7 @@ namespace indigo
 
         bool is_not_list;
         bool has_fragment;
+        bool has_pos;
         std::vector<AutoInt> element_list;
         std::unordered_map<int, std::size_t> bond_id_to_connection_idx;
         std::unordered_map<int, std::size_t> node_id_to_connection_idx;
@@ -166,7 +167,8 @@ namespace indigo
 
     struct CdxmlBracket
     {
-        CdxmlBracket() : repeat_pattern(RepeatingUnit::HEAD_TO_TAIL), usage(kCDXBracketUsage_Generic), is_superatom(false)
+        CdxmlBracket()
+            : repeat_pattern(RepeatingUnit::HEAD_TO_TAIL), usage(kCDXBracketUsage_Generic), is_superatom(false), has_superatom_position(false)
         {
         }
         std::vector<AutoInt> bracketed_list;
@@ -175,6 +177,7 @@ namespace indigo
         int repeat_pattern;
         std::string label;
         bool is_superatom;
+        bool has_superatom_position;
         Vec3f superatom_position;
     };
 
