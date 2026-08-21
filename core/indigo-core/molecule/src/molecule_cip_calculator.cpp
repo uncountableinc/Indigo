@@ -103,9 +103,24 @@ bool MoleculeCIPCalculator::addCIPStereoDescriptors(BaseMolecule& mol)
 
     if (stereo_passed.size() > 0)
     {
-        int nrs = _getNumberOfStereoDescritors(atom_cip_desc);
         int nrs_before = 0;
         int nrs_after = 0;
+
+        ignored.clear_resize(mol.vertexEnd());
+        ignored.zerofill();
+
+        for (auto i : mol.vertices())
+            if (mol.asMolecule().convertableToImplicitHydrogen(i))
+                ignored[i] = 1;
+
+        MoleculeAutomorphismSearch as;
+
+        as.detect_invalid_cistrans_bonds = true;
+        as.detect_invalid_stereocenters = true;
+        as.find_canonical_ordering = false;
+        as.ignored_vertices = ignored.ptr();
+        as.process(mol.asMolecule());
+
         for (;;)
         {
             nrs_before = _getNumberOfStereoDescritors(atom_cip_desc);
@@ -113,59 +128,12 @@ bool MoleculeCIPCalculator::addCIPStereoDescriptors(BaseMolecule& mol)
             for (auto i = 0; i < stereo_passed.size(); i++)
             {
                 mol.stereocenters.get(stereo_passed[i], atom_idx, type, group, pyramid);
-                if (atom_cip_desc[atom_idx] == CIPDesc::UNKNOWN)
+                if (!as.invalidStereocenter(atom_idx) && atom_cip_desc[atom_idx] == CIPDesc::UNKNOWN)
                     _calcRSStereoDescriptor(mol, *unfolded_h_mol, stereo_passed[i], atom_cip_desc, stereo_passed, true, equiv_ligands, digraph_cip_used);
-                /*
-                   printf("Stereo descriptors for stereo center %d (2 cycle): \n", i);
-                   for (int k = 0; k < atom_cip_desc.size(); k++)
-                     printf("%d ", atom_cip_desc[k]);
-                   printf("\n");
-                */
             }
             nrs_after = _getNumberOfStereoDescritors(atom_cip_desc);
             if (nrs_after == nrs_before)
                 break;
-        }
-
-        if ((nrs_after - nrs) < stereo_passed.size())
-        {
-            ignored.clear_resize(mol.vertexEnd());
-            ignored.zerofill();
-
-            for (auto i : mol.vertices())
-                if (mol.asMolecule().convertableToImplicitHydrogen(i))
-                    ignored[i] = 1;
-
-            MoleculeAutomorphismSearch as;
-
-            as.detect_invalid_cistrans_bonds = true;
-            as.detect_invalid_stereocenters = true;
-            as.find_canonical_ordering = false;
-            as.ignored_vertices = ignored.ptr();
-            as.process(mol.asMolecule());
-
-            for (;;)
-            {
-                nrs_before = _getNumberOfStereoDescritors(atom_cip_desc);
-                bool digraph_cip_used = false;
-                for (auto i = 0; i < stereo_passed.size(); i++)
-                {
-                    mol.stereocenters.get(stereo_passed[i], atom_idx, type, group, pyramid);
-                    if (!as.invalidStereocenter(atom_idx) && atom_cip_desc[atom_idx] == CIPDesc::UNKNOWN)
-                    {
-                        _calcRSStereoDescriptor(mol, *unfolded_h_mol, stereo_passed[i], atom_cip_desc, stereo_passed, true, equiv_ligands, digraph_cip_used);
-                        /*
-                           printf("Stereo descriptors for stereo center %d (3 cycle): \n", i);
-                           for (int k = 0; k < atom_cip_desc.size(); k++)
-                             printf("%d ", atom_cip_desc[k]);
-                           printf("\n");
-                        */
-                    }
-                }
-                nrs_after = _getNumberOfStereoDescritors(atom_cip_desc);
-                if (nrs_after == nrs_before)
-                    break;
-            }
         }
     }
 
