@@ -31,96 +31,96 @@ using namespace indigo;
 namespace
 {
 
-// Expanded is the exception a superatom has to declare; every other display option means the atoms
-// are hidden behind a label. molfile only lists the expanded ones on its SDS EXP line, cmf_saver
-// packs Undefined and Contracted to the same bit, and ketcher-core reads the flag as
-// Boolean(data.expanded), so absent already means collapsed everywhere.
-void collectContractedAtoms(BaseMolecule& mol, std::unordered_set<int>& collapsed, std::vector<Vec2f>& centres)
-{
-    for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
+    // Expanded is the exception a superatom has to declare; every other display option means the atoms
+    // are hidden behind a label. molfile only lists the expanded ones on its SDS EXP line, cmf_saver
+    // packs Undefined and Contracted to the same bit, and ketcher-core reads the flag as
+    // Boolean(data.expanded), so absent already means collapsed everywhere.
+    void collectContractedAtoms(BaseMolecule& mol, std::unordered_set<int>& collapsed, std::vector<Vec2f>& centres)
     {
-        SGroup& sg = mol.sgroups.getSGroup(i);
-        if (sg.sgroup_type != SGroup::SG_TYPE_SUP || sg.contracted == DisplayOption::Expanded || sg.atoms.size() == 0)
-            continue;
-        Vec2f centre;
-        for (int j = 0; j < sg.atoms.size(); ++j)
+        for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
         {
-            const Vec3f& xyz = mol.getAtomXyz(sg.atoms[j]);
-            centre.add(Vec2f(xyz.x, xyz.y));
-            collapsed.insert(sg.atoms[j]);
+            SGroup& sg = mol.sgroups.getSGroup(i);
+            if (sg.sgroup_type != SGroup::SG_TYPE_SUP || sg.contracted == DisplayOption::Expanded || sg.atoms.size() == 0)
+                continue;
+            Vec2f centre;
+            for (int j = 0; j < sg.atoms.size(); ++j)
+            {
+                const Vec3f& xyz = mol.getAtomXyz(sg.atoms[j]);
+                centre.add(Vec2f(xyz.x, xyz.y));
+                collapsed.insert(sg.atoms[j]);
+            }
+            centre.scale(1.0f / static_cast<float>(sg.atoms.size()));
+            centres.push_back(centre);
         }
-        centre.scale(1.0f / static_cast<float>(sg.atoms.size()));
-        centres.push_back(centre);
     }
-}
 
-// True when every atom of the component is hidden behind a contracted label,
-// which makes the component a standalone abbreviation on the page.
-bool isWhollyContracted(BaseMolecule& mol)
-{
-    std::unordered_set<int> collapsed;
-    std::vector<Vec2f> centres;
-    collectContractedAtoms(mol, collapsed, centres);
-    if (centres.empty() || mol.vertexCount() == 0)
-        return false;
-    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
-    {
-        if (collapsed.find(idx) == collapsed.end())
-            return false;
-    }
-    return true;
-}
-
-// A standalone abbreviation is drawn as a single label, so its hidden atoms
-// must not each cast a vote on which side of an arrow the component sits: a
-// large one spans further than the arrow itself and splits its own vote across
-// all three zones, deciding the role by accident (MAT-77406). A bonded
-// abbreviation belongs to a drawn skeleton and keeps the per-atom vote.
-void collectZonePoints(BaseMolecule& mol, std::vector<Vec2f>& points)
-{
-    if (isWhollyContracted(mol))
+    // True when every atom of the component is hidden behind a contracted label,
+    // which makes the component a standalone abbreviation on the page.
+    bool isWhollyContracted(BaseMolecule& mol)
     {
         std::unordered_set<int> collapsed;
-        collectContractedAtoms(mol, collapsed, points);
-        return;
+        std::vector<Vec2f> centres;
+        collectContractedAtoms(mol, collapsed, centres);
+        if (centres.empty() || mol.vertexCount() == 0)
+            return false;
+        for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+        {
+            if (collapsed.find(idx) == collapsed.end())
+                return false;
+        }
+        return true;
     }
-    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
-    {
-        const Vec3f& xyz = mol.getAtomXyz(idx);
-        points.emplace_back(xyz.x, xyz.y);
-    }
-}
 
-// A standalone abbreviation occupies only the space of its label, so its
-// extent is the collapsed points. A bonded abbreviation hangs off a drawn
-// skeleton that still occupies its full extent, so that component keeps the
-// plain atom bounding box.
-void getDrawnBoundingBox(BaseMolecule& mol, Rect2f& bbox, const Vec2f& minbox)
-{
-    if (!isWhollyContracted(mol))
+    // A standalone abbreviation is drawn as a single label, so its hidden atoms
+    // must not each cast a vote on which side of an arrow the component sits: a
+    // large one spans further than the arrow itself and splits its own vote across
+    // all three zones, deciding the role by accident (MAT-77406). A bonded
+    // abbreviation belongs to a drawn skeleton and keeps the per-atom vote.
+    void collectZonePoints(BaseMolecule& mol, std::vector<Vec2f>& points)
     {
-        mol.getBoundingBox(bbox, minbox);
-        return;
+        if (isWhollyContracted(mol))
+        {
+            std::unordered_set<int> collapsed;
+            collectContractedAtoms(mol, collapsed, points);
+            return;
+        }
+        for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+        {
+            const Vec3f& xyz = mol.getAtomXyz(idx);
+            points.emplace_back(xyz.x, xyz.y);
+        }
     }
-    std::unordered_set<int> collapsed;
-    std::vector<Vec2f> centres;
-    collectContractedAtoms(mol, collapsed, centres);
-    Vec2f a = centres.front();
-    Vec2f b = centres.front();
-    for (const auto& centre : centres)
+
+    // A standalone abbreviation occupies only the space of its label, so its
+    // extent is the collapsed points. A bonded abbreviation hangs off a drawn
+    // skeleton that still occupies its full extent, so that component keeps the
+    // plain atom bounding box.
+    void getDrawnBoundingBox(BaseMolecule& mol, Rect2f& bbox, const Vec2f& minbox)
     {
-        a.min(centre);
-        b.max(centre);
+        if (!isWhollyContracted(mol))
+        {
+            mol.getBoundingBox(bbox, minbox);
+            return;
+        }
+        std::unordered_set<int> collapsed;
+        std::vector<Vec2f> centres;
+        collectContractedAtoms(mol, collapsed, centres);
+        Vec2f a = centres.front();
+        Vec2f b = centres.front();
+        for (const auto& centre : centres)
+        {
+            a.min(centre);
+            b.max(centre);
+        }
+        bbox = Rect2f(a, b);
+        if (bbox.width() < minbox.x || bbox.height() < minbox.y)
+        {
+            const Vec2f center(bbox.center());
+            const auto half_width = std::max(bbox.width() / 2, minbox.x / 2);
+            const auto half_height = std::max(bbox.height() / 2, minbox.y / 2);
+            bbox = Rect2f(Vec2f(center.x - half_width, center.y - half_height), Vec2f(center.x + half_width, center.y + half_height));
+        }
     }
-    bbox = Rect2f(a, b);
-    if (bbox.width() < minbox.x || bbox.height() < minbox.y)
-    {
-        const Vec2f center(bbox.center());
-        const auto half_width = std::max(bbox.width() / 2, minbox.x / 2);
-        const auto half_height = std::max(bbox.height() / 2, minbox.y / 2);
-        bbox = Rect2f(Vec2f(center.x - half_width, center.y - half_height), Vec2f(center.x + half_width, center.y + half_height));
-    }
-}
 
 } // namespace
 
