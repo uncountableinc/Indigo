@@ -1,0 +1,3 @@
+multistep_contracted_reagent: C1CCC1>P(C1C=CC=CC=1)(C1C=CC=CC=1)C1C=CC=CC=1>C1CCCC1
+multistep_contracted_small_reagent: C1CCC1>CO>C1CCCC1
+multistep_no_contracted_control: C1CCC1>C1CCCCC1>C1CCCC1
