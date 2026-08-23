@@ -17,13 +17,112 @@
  ***************************************************************************/
 #include <numeric>
 #include <queue>
+#include <unordered_set>
 
 #include "layout/pathway_layout.h"
+#include "molecule/base_molecule.h"
+#include "molecule/molecule_sgroups.h"
 #include "reaction/pathway_reaction.h"
 #include "reaction/reaction.h"
 #include "reaction/reaction_multistep_detector.h"
 
 using namespace indigo;
+
+namespace
+{
+
+// Expanded is the exception a superatom has to declare; every other display option means the atoms
+// are hidden behind a label. molfile only lists the expanded ones on its SDS EXP line, cmf_saver
+// packs Undefined and Contracted to the same bit, and ketcher-core reads the flag as
+// Boolean(data.expanded), so absent already means collapsed everywhere.
+void collectContractedAtoms(BaseMolecule& mol, std::unordered_set<int>& collapsed, std::vector<Vec2f>& centres)
+{
+    for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
+    {
+        SGroup& sg = mol.sgroups.getSGroup(i);
+        if (sg.sgroup_type != SGroup::SG_TYPE_SUP || sg.contracted == DisplayOption::Expanded || sg.atoms.size() == 0)
+            continue;
+        Vec2f centre;
+        for (int j = 0; j < sg.atoms.size(); ++j)
+        {
+            const Vec3f& xyz = mol.getAtomXyz(sg.atoms[j]);
+            centre.add(Vec2f(xyz.x, xyz.y));
+            collapsed.insert(sg.atoms[j]);
+        }
+        centre.scale(1.0f / static_cast<float>(sg.atoms.size()));
+        centres.push_back(centre);
+    }
+}
+
+// True when every atom of the component is hidden behind a contracted label,
+// which makes the component a standalone abbreviation on the page.
+bool isWhollyContracted(BaseMolecule& mol)
+{
+    std::unordered_set<int> collapsed;
+    std::vector<Vec2f> centres;
+    collectContractedAtoms(mol, collapsed, centres);
+    if (centres.empty() || mol.vertexCount() == 0)
+        return false;
+    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    {
+        if (collapsed.find(idx) == collapsed.end())
+            return false;
+    }
+    return true;
+}
+
+// A standalone abbreviation is drawn as a single label, so its hidden atoms
+// must not each cast a vote on which side of an arrow the component sits: a
+// large one spans further than the arrow itself and splits its own vote across
+// all three zones, deciding the role by accident (MAT-77406). A bonded
+// abbreviation belongs to a drawn skeleton and keeps the per-atom vote.
+void collectZonePoints(BaseMolecule& mol, std::vector<Vec2f>& points)
+{
+    if (isWhollyContracted(mol))
+    {
+        std::unordered_set<int> collapsed;
+        collectContractedAtoms(mol, collapsed, points);
+        return;
+    }
+    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    {
+        const Vec3f& xyz = mol.getAtomXyz(idx);
+        points.emplace_back(xyz.x, xyz.y);
+    }
+}
+
+// A standalone abbreviation occupies only the space of its label, so its
+// extent is the collapsed points. A bonded abbreviation hangs off a drawn
+// skeleton that still occupies its full extent, so that component keeps the
+// plain atom bounding box.
+void getDrawnBoundingBox(BaseMolecule& mol, Rect2f& bbox, const Vec2f& minbox)
+{
+    if (!isWhollyContracted(mol))
+    {
+        mol.getBoundingBox(bbox, minbox);
+        return;
+    }
+    std::unordered_set<int> collapsed;
+    std::vector<Vec2f> centres;
+    collectContractedAtoms(mol, collapsed, centres);
+    Vec2f a = centres.front();
+    Vec2f b = centres.front();
+    for (const auto& centre : centres)
+    {
+        a.min(centre);
+        b.max(centre);
+    }
+    bbox = Rect2f(a, b);
+    if (bbox.width() < minbox.x || bbox.height() < minbox.y)
+    {
+        const Vec2f center(bbox.center());
+        const auto half_width = std::max(bbox.width() / 2, minbox.x / 2);
+        const auto half_height = std::max(bbox.height() / 2, minbox.y / 2);
+        bbox = Rect2f(Vec2f(center.x - half_width, center.y - half_height), Vec2f(center.x + half_width, center.y + half_height));
+    }
+}
+
+} // namespace
 
 inline void merge_bbox(Rect2f& bb1, const Rect2f& bb2)
 {
@@ -61,7 +160,7 @@ void ReactionMultistepDetector::createSummBlocks()
     {
         Rect2f bbox;
         auto& comp = _merged_components[i];
-        comp.mol->getBoundingBox(bbox, MIN_MOL_SIZE);
+        getDrawnBoundingBox(*comp.mol, bbox, MIN_MOL_SIZE);
         mol_tops.emplace_back(bbox.top(), i);
         mol_bottoms.emplace_back(bbox.bottom(), i);
         mol_lefts.emplace_back(bbox.left(), i);
@@ -601,6 +700,14 @@ std::optional<std::pair<int, int>> ReactionMultistepDetector::isMergeable(size_t
     auto dist_it = mdi.distances_map.find(mol_idx2);
     if (dist_it != mdi.distances_map.end() && dist_it->second < LayoutOptions::DEFAULT_BOND_LENGTH * 2)
     {
+        // A standalone contracted abbreviation must reach role assignment as its own component,
+        // otherwise its label is folded into a neighbour's formula and role (MAT-77406). Anything
+        // still without a role afterwards is absorbed by mergeUndefinedComponents, so refusing the
+        // merge here costs no component.
+        if (_components[mol_idx1].mol && _components[mol_idx2].mol &&
+            (isWhollyContracted(*_components[mol_idx1].mol) || isWhollyContracted(*_components[mol_idx2].mol)))
+            return std::nullopt;
+
         // collect surrounding zones for both molecules
         std::map<int, std::set<int>> other_zones1;
         std::map<int, std::set<int>> other_zones2;
@@ -750,7 +857,7 @@ ReactionMultistepDetector::ReactionType ReactionMultistepDetector::detectReactio
     {
         auto component = extractComponent(i);
         Rect2f bbox;
-        component->getBoundingBox(bbox, Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
+        getDrawnBoundingBox(*component, bbox, Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
         // auto hull = component->getConvexHull(Vec2f(LayoutOptions::DEFAULT_BOND_LENGTH, LayoutOptions::DEFAULT_BOND_LENGTH));
         std::vector<Vec2f> hull;
         hull.push_back(bbox.leftTop());
@@ -1021,7 +1128,7 @@ void ReactionMultistepDetector::mergeUndefinedComponents()
         {
             auto& csb = _component_summ_blocks[rc.summ_block_idx];
             Rect2f bbox;
-            rc.molecule->getBoundingBox(bbox);
+            getDrawnBoundingBox(*rc.molecule, bbox, Vec2f(0, 0));
             if (csb.role == BaseReaction::UNDEFINED)
                 undef_component_bboxes.emplace_back(i, bbox);
             else
@@ -1459,10 +1566,10 @@ int ReactionMultistepDetector::getMoleculeSide(const ReactionArrowObject& arrow,
 {
     bool reverseReactionOrder = arrow.getArrowType() == ReactionArrowObject::ERetrosynthetic;
     bool has_element = false;
-    for (int idx = mol.vertexBegin(); idx < mol.vertexEnd(); idx = mol.vertexNext(idx))
+    std::vector<Vec2f> points;
+    collectZonePoints(mol, points);
+    for (const auto& pt : points)
     {
-        Vec3f& pt3d = mol.getAtomXyz(idx);
-        Vec2f pt(pt3d.x, pt3d.y);
         int side = !reverseReactionOrder ? getPointSide(pt, arrow.getTail(), arrow.getHead()) : getPointSide(pt, arrow.getHead(), arrow.getTail());
         sides[side]++;
         has_element = true;
@@ -1548,8 +1655,12 @@ void ReactionMultistepDetector::constructSimpleArrowReaction(BaseReaction& rxn)
                     {
                         std::array<int, KProductArea + 1> sides{};
                         auto side = getMoleculeSide(arrow, *rc.molecule, sides);
-                        int rem_up_count = rc.molecule->vertexCount() - sides[KReagentUpArea];
-                        int rem_down_count = rc.molecule->vertexCount() - sides[KReagentDownArea];
+                        // Count against the votes actually cast, not the atom count. A contracted
+                        // group casts one vote for its whole label, so measuring it against the
+                        // atoms it hides makes this rescue unreachable for it (MAT-77406).
+                        const int vote_count = std::accumulate(sides.begin(), sides.end(), 0);
+                        int rem_up_count = vote_count - sides[KReagentUpArea];
+                        int rem_down_count = vote_count - sides[KReagentDownArea];
 
                         if (side > -1 && (sides[KReagentUpArea] > rem_up_count || sides[KReagentDownArea] > rem_down_count))
                             rxn.addCatalystCopy(*rc.molecule, 0, 0);
