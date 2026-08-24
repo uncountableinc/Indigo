@@ -19,6 +19,7 @@
 #include "gzip/gzip_scanner.h"
 #include "lzw/lzw_decoder.h"
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -1014,17 +1015,22 @@ void MoleculeCdxmlLoader::_addAtomsAndBonds(BaseMolecule& mol, const std::vector
 
             _id_to_atom_idx.emplace(atom.id, atom_idx);
             mol.setAtomXyz(atom_idx, atom.pos);
+            const bool is_pseudo_atom = atom.type == kCDXNodeType_GenericNickname || atom.element == ELEM_PSEUDO;
             _pmol->setAtomCharge_Silent(atom_idx, atom.charge);
             if (atom.valence)
                 _pmol->setExplicitValence(atom_idx, atom.valence);
             _pmol->setAtomRadical(atom_idx, atom.radical);
-            _pmol->setAtomIsotope(atom_idx, atom.isotope);
+            // A pseudo-atom has no element, so an isotope on it is meaningless - and both the
+            // KET and the molfile loader reject that combination outright, so emitting it here
+            // would produce output that Indigo itself cannot read back.
+            if (!is_pseudo_atom)
+                _pmol->setAtomIsotope(atom_idx, atom.isotope);
             const auto it = kIndexToCIPDesc.find(atom.stereo);
             if (it != kIndexToCIPDesc.end())
             {
                 _pmol->setAtomCIP(atom_idx, it->second);
             }
-            if (atom.type == kCDXNodeType_GenericNickname || atom.element == ELEM_PSEUDO)
+            if (is_pseudo_atom)
                 _pmol->setPseudoAtom(atom_idx, atom.label.c_str());
             switch (atom.enchanced_stereo)
             {
@@ -1421,8 +1427,11 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
     {
         if (child_elem->name() == "t")
         {
+            std::vector<CdxmlLabelRun> runs;
+            _parseLabelRuns(*child_elem, runs);
             std::string label;
-            _parseLabel(*child_elem, label);
+            for (const auto& run : runs)
+                label += run.text;
             if (label.size() > 1 && label.find("R") == 0)
             {
                 try
@@ -1438,10 +1447,10 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
             }
             if (node.element == ELEM_C) // overridable
             {
-                auto element = Element::fromString2(label.c_str());
-                if (element > 0)
-                    node.element = element;
-                else if (node.label.empty())
+                // _applyDecoratedLabel handles both the plain "the label is just an element
+                // symbol" case and the superscript-decorated ones. Anything it does not
+                // recognise is a genuine nickname and still becomes a pseudo-atom.
+                if (!_applyDecoratedLabel(node, runs) && node.label.empty())
                 {
                     node.label = label;
                     node.element = ELEM_PSEUDO;
@@ -1803,9 +1812,9 @@ void MoleculeCdxmlLoader::_parseArrow(BaseCDXElement& elem)
     }
 }
 
-void MoleculeCdxmlLoader::_parseLabel(BaseCDXElement& elem, std::string& label)
+void MoleculeCdxmlLoader::_parseLabelRuns(BaseCDXElement& elem, std::vector<CdxmlLabelRun>& runs)
 {
-    label.clear();
+    runs.clear();
     for (auto text_style = elem.firstChildElement(); text_style->hasContent(); text_style = text_style->nextSiblingElement())
     {
         std::string text_element = text_style->value();
@@ -1814,9 +1823,194 @@ void MoleculeCdxmlLoader::_parseLabel(BaseCDXElement& elem, std::string& label)
             auto txt = text_style->getText();
             if (!is_valid_utf8(txt))
                 txt = latin1_to_utf8(txt);
-            label += txt;
+
+            // font_face has to be reset for every run: AutoInt keeps its previous value when
+            // a run carries no "face" attribute, so hoisting this out of the loop would leak
+            // one run's styling onto the next one.
+            AutoInt font_face = 0;
+            std::unordered_map<std::string, std::function<void(const std::string&)>> style_dispatcher = {{"face", intLambda(font_face)}};
+            applyDispatcher(*text_style->firstProperty(), style_dispatcher);
+
+            runs.push_back(CdxmlLabelRun{txt, static_cast<unsigned int>(static_cast<int>(font_face))});
         }
     }
+}
+
+void MoleculeCdxmlLoader::_parseLabel(BaseCDXElement& elem, std::string& label)
+{
+    std::vector<CdxmlLabelRun> runs;
+    _parseLabelRuns(elem, runs);
+    label.clear();
+    for (const auto& run : runs)
+        label += run.text;
+}
+
+// A leading superscript on an atom label is a mass number: digits only, in a plausible range.
+static bool parseMassNumberDecoration(const std::string& text, int& isotope)
+{
+    if (text.empty() || text.size() > 3 || !std::all_of(text.begin(), text.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+        return false;
+    const int value = std::stoi(text);
+    if (value < 1 || value > 300)
+        return false;
+    isotope = value;
+    return true;
+}
+
+// A trailing superscript on an atom label is a charge: a sign with an optional magnitude on
+// either side of it, e.g. "+", "-", "2+", "+2". ChemDraw also writes U+2212 MINUS SIGN rather
+// than an ASCII hyphen for negative charges.
+static bool parseChargeDecoration(const std::string& text, int& charge)
+{
+    std::string normalized;
+    for (size_t i = 0; i < text.size();)
+    {
+        if (text.compare(i, 3, "\xe2\x88\x92") == 0) // U+2212 MINUS SIGN
+        {
+            normalized += '-';
+            i += 3;
+        }
+        else
+            normalized += text[i++];
+    }
+
+    char sign = 0;
+    std::string digits;
+    for (char c : normalized)
+    {
+        if (c == '+' || c == '-')
+        {
+            if (sign)
+                return false;
+            sign = c;
+        }
+        else if (std::isdigit(static_cast<unsigned char>(c)))
+            digits += c;
+        else
+            return false;
+    }
+
+    if (!sign || digits.size() > 2)
+        return false;
+
+    const int magnitude = digits.empty() ? 1 : std::stoi(digits);
+    if (magnitude < 1 || magnitude > 15)
+        return false;
+    charge = sign == '-' ? -magnitude : magnitude;
+    return true;
+}
+
+// Resolve the element from an atom label body, allowing for the implicit hydrogens ChemDraw
+// draws alongside the symbol: a carbon with three of them renders as "CH3" (with the count
+// subscripted), so the element symbol is only the part before a trailing "H<count>". The real
+// count lives in NumHydrogens=, so nothing is lost by dropping the drawn one here.
+//
+// Only labels of the exact shape <element symbol>H<digits> are accepted, which keeps genuine
+// group nicknames out: "COOH" and "CHO" leave a remainder that is not an element, and "Ph"
+// has no capital H at all.
+static int elementFromDrawnLabel(const std::string& body)
+{
+    int element = Element::fromString2(body.c_str());
+    if (element > 0)
+        return element;
+
+    const size_t h_pos = body.find_last_of('H');
+    if (h_pos == std::string::npos || h_pos == 0)
+        return -1;
+    if (!std::all_of(body.begin() + h_pos + 1, body.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+        return -1;
+    return Element::fromString2(body.substr(0, h_pos).c_str());
+}
+
+// Decode an atom label that is only the drawn rendering of properties already present on the
+// <n> element itself: a superscript mass number ("13" + "C") or a superscript charge
+// ("C" + "+"). ChemDraw writes such a <t> whenever an atom is annotated and therefore needs
+// explicit drawing instructions, and flattening it to "13C" turns a perfectly good carbon
+// into a pseudo-atom.
+//
+// Returns true when the label was recognised as that kind of decoration, in which case
+// node.element has been set and the label must NOT become a pseudo-atom label. Returns false
+// for everything else - notably genuine nicknames such as "Ph" or "OEt", which still fall
+// through to the pseudo-atom path.
+//
+// Attributes stay authoritative: a label may only supply a value that the corresponding
+// attribute left at zero, never override one. Isotope=/Charge= are what ChemDraw computes
+// chemistry from, while the <t> is a rendering artifact that can be stale or hand-edited.
+// That also bounds the change - it can add information but never contradict a value the
+// loader already gets right.
+bool MoleculeCdxmlLoader::_applyDecoratedLabel(CdxmlNode& node, const std::vector<CdxmlLabelRun>& runs)
+{
+    // Superscripts before the element symbol are the mass number, superscripts after it are
+    // the charge - that ordering is what lets "13C+" be told apart from a charge of +13.
+    std::string leading_super, baseline, trailing_super;
+    bool seen_baseline = false;
+    for (const auto& run : runs)
+    {
+        if (run.is_superscript())
+            (seen_baseline ? trailing_super : leading_super) += run.text;
+        else
+        {
+            baseline += run.text;
+            seen_baseline = true;
+        }
+    }
+
+    if (baseline.empty())
+        return false;
+
+    int element = Element::fromString2(baseline.c_str());
+    int isotope = 0;
+
+    // A superscript mass number in front means the baseline is the element symbol plus any
+    // implicit hydrogens drawn with it, e.g. "13" + "CH3".
+    if (element <= 0 && leading_super.size())
+        element = elementFromDrawnLabel(baseline);
+
+    // No styling anywhere on the label. ChemDraw superscripts the mass number, but other
+    // producers - and hand-edited files - write it as plain text, leaving no superscript bit
+    // to read. Accept the label as decoration only when the Isotope= attribute independently
+    // corroborates it: without that, a flat "13C" is genuinely indistinguishable from an atom
+    // nicknamed "13C", and guessing would be worse than treating it as a nickname.
+    if (element <= 0 && leading_super.empty() && trailing_super.empty() && node.isotope != 0)
+    {
+        const std::string mass_prefix = std::to_string(static_cast<int>(node.isotope));
+        if (baseline.compare(0, mass_prefix.size(), mass_prefix) == 0)
+            element = elementFromDrawnLabel(baseline.substr(mass_prefix.size()));
+    }
+
+    // Hydrogen isotope shorthand, matching what the KET and molfile loaders already accept.
+    if (element <= 0 && leading_super.empty())
+    {
+        if (baseline == "D")
+        {
+            element = ELEM_H;
+            isotope = DEUTERIUM;
+        }
+        else if (baseline == "T")
+        {
+            element = ELEM_H;
+            isotope = TRITIUM;
+        }
+    }
+
+    if (element <= 0)
+        return false;
+
+    // Reaching here with a leading superscript means the D/T branch above did not fire, so
+    // isotope is still unset.
+    if (leading_super.size() && !parseMassNumberDecoration(leading_super, isotope))
+        return false;
+
+    int charge = 0;
+    if (trailing_super.size() && !parseChargeDecoration(trailing_super, charge))
+        return false;
+
+    node.element = element;
+    if (isotope && node.isotope == 0)
+        node.isotope = isotope;
+    if (charge && node.charge == 0)
+        node.charge = charge;
+    return true;
 }
 
 void MoleculeCdxmlLoader::_parseTextToKetObject(BaseCDXElement& elem, std::vector<SimpleTextObject>& text_objects)

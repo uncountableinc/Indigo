@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CDXML CreationProgram="ChemDraw 26.0.0.6599" InterpretChemically="yes"
+       HideImplicitHydrogens="yes" LabelFont="60" LabelSize="8" BondLength="14.94">
+<fonttable><font id="60" charset="x-mac-roman" name="Arial"/></fonttable>
+<page id="931" BoundingBox="0 0 540 720">
+<fragment id="703">
+<n id="704" p="133.84 486.78" AS="N"/><n id="705" p="133.84 501.72" AS="N"/>
+<n id="706" p="146.77 509.19" AS="N"/><n id="707" p="159.70 501.72" AS="N"/>
+<n id="708" p="159.70 486.78" AS="N"/><n id="709" p="146.77 479.32" AS="N"/>
+<n id="710" p="172.64 509.19" AS="N"/><n id="711" p="185.57 501.72" AS="N"/>
+<n id="712" p="185.57 486.78" AS="N"/><n id="713" p="172.64 479.32" AS="N"/>
+<n id="714" p="198.51 509.19" AS="N"/><n id="715" p="211.44 501.72" AS="N"/>
+<n id="716" p="211.44 486.78" AS="N"/>
+<n id="717" p="198.51 479.32" NumHydrogens="1" Isotope="13" NeedsClean="yes" AS="N">
+<t p="188.95 482.91" BoundingBox="189.60 474.22 201.08 483.01">
+<s font="60" size="8" color="0" face="64">13</s>
+<s font="60" size="8" color="0" face="96">C</s></t></n>
+<b id="718" B="704" E="705" Order="2"/><b id="719" B="705" E="706"/>
+<b id="720" B="706" E="707" Order="2"/><b id="721" B="707" E="708"/>
+<b id="722" B="708" E="709" Order="2"/><b id="723" B="709" E="704"/>
+<b id="724" B="707" E="710"/><b id="725" B="710" E="711" Order="2"/>
+<b id="726" B="711" E="712"/><b id="727" B="712" E="713" Order="2"/>
+<b id="728" B="713" E="708"/><b id="729" B="711" E="714"/>
+<b id="730" B="714" E="715" Order="2"/><b id="731" B="715" E="716"/>
+<b id="732" B="716" E="717" Order="2"/><b id="733" B="717" E="712"/>
+</fragment>
+</page></CDXML>
