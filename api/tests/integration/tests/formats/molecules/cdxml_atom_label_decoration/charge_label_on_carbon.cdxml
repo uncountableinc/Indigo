@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CDXML CreationProgram="ChemDraw 26.0.0.6599" LabelFont="60" LabelSize="8" BondLength="14.94">
+<fonttable><font id="60" charset="x-mac-roman" name="Arial"/></fonttable>
+<page id="931" BoundingBox="0 0 540 720">
+<fragment id="703">
+<n id="712" p="185.57 486.78" AS="N"/>
+<n id="717" p="198.51 479.32" Charge="1" NeedsClean="yes" AS="N">
+<t p="188.95 482.91"><s font="60" size="8" face="96">C</s><s font="60" size="8" face="64">+</s></t></n>
+<b id="733" B="717" E="712"/>
+</fragment>
+</page></CDXML>

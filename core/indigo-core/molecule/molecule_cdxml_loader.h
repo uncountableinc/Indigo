@@ -104,6 +104,24 @@ namespace indigo
         unsigned int face;
     };
 
+    // One <s> style run inside a <t> text object: its text plus the CDXML font
+    // "face" bitmask. An atom label needs the styling and not just the flat
+    // text, because ChemDraw draws a mass number or a charge as a superscript
+    // run - and that superscript bit is the only thing that distinguishes
+    // "13C" meaning carbon-13 from an atom nicknamed "13C".
+    struct CdxmlLabelRun
+    {
+        std::string text;
+        unsigned int face;
+
+        bool is_superscript() const
+        {
+            // 96 (KCDXMLChemicalFontStyle) is a sentinel meaning "chemically
+            // formatted", not a literal subscript|superscript combination.
+            return face != KCDXMLChemicalFontStyle && (face & KCDXMLFontStyleSuperscript) != 0;
+        }
+    };
+
     struct _ExtConnection
     {
         int bond_id;
@@ -950,6 +968,8 @@ namespace indigo
         void _parseTextToKetObject(BaseCDXElement& elem, std::vector<SimpleTextObject>& text_objects);
 
         void _parseLabel(BaseCDXElement& elem, std::string& label);
+        void _parseLabelRuns(BaseCDXElement& elem, std::vector<CdxmlLabelRun>& runs);
+        static bool _applyDecoratedLabel(CdxmlNode& node, const std::vector<CdxmlLabelRun>& runs);
 
         void _parseGraphic(BaseCDXElement& elem);
         void _parseArrow(BaseCDXElement& elem);

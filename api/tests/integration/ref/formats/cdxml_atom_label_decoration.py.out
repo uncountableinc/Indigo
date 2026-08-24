@@ -1,0 +1,91 @@
+*** CDXML atom label decoration (isotope / charge superscripts) ***
+charge_label_on_carbon.cdxml
+  smiles:  C[CH2+]
+  atom: symbol=C isotope=0 charge=1 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+deuterium_label.cdxml
+  smiles:  [2H]C
+  atom: symbol=H isotope=2 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_13c_anthracene.cdxml
+  smiles:  C1=C2[13CH]=CC=CC2=CC2=CC=CC=C21
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_and_charge_label.cdxml
+  smiles:  C[13CH2+]
+  atom: symbol=C isotope=13 charge=1 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_attr_and_label.cdxml
+  smiles:  C[13CH3]
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_flat_label_corroborated.cdxml
+  smiles:  C[13CH3]
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_flat_label_with_hydrogens.cdxml
+  smiles:  C[13CH3]
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_label_only.cdxml
+  smiles:  C[13CH3]
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+isotope_superscript_with_hydrogens.cdxml
+  smiles:  C[13CH3]
+  atom: symbol=C isotope=13 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_baseline_13c_not_superscript.cdxml
+  smiles:  C*
+  atom: symbol=13C isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_charge_on_heteroatom.cdxml
+  smiles:  C[NH3+]
+  atom: symbol=N isotope=0 charge=1 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_nickname_cho.cdxml
+  smiles:  C*
+  atom: symbol=CHO isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_nickname_cooh.cdxml
+  smiles:  C*
+  atom: symbol=COOH isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_nickname_nh2.cdxml
+  smiles:  C*
+  atom: symbol=NH2 isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_nickname_ph.cdxml
+  smiles:  C*
+  atom: symbol=Ph isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_subscript_h2o.cdxml
+  smiles:  C*
+  atom: symbol=H2O isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+regression_unknown_label_with_isotope_attr.cdxml
+  smiles:  C*
+  atom: symbol=Xyz isotope=0 charge=0 pseudo=True
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
+tritium_label.cdxml
+  smiles:  [3H]C
+  atom: symbol=H isotope=3 charge=0 pseudo=False
+  ket reload (loadMolecule): OK
+  ket reload (loadQueryMolecule): OK
