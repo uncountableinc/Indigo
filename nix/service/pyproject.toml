@@ -1,0 +1,25 @@
+# Dependency set for utils/indigo-service/backend/service, kept in lockstep with
+# that directory's requirements.txt. epam.indigo is deliberately absent: it is
+# built from this repo by the epam-indigo derivation rather than fetched.
+[project]
+name = "indigo-service-deps"
+version = "0.0.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "celery==5.2.7",
+    "flasgger==0.9.7.1",
+    "Flask==2.3.2",
+    "Flask-HTTPAuth==4.8.0",
+    "gunicorn==23.0.0",
+    "marshmallow==3.19.0",
+    "pyparsing==3.0.9",
+    "psycopg2-binary==2.9.6",
+    "redis==4.5.5",
+    "SQLAlchemy==2.0.15",
+    "tzdata",
+    "waitress==3.0.2",
+]
+
+[tool.uv]
+# Wheels only where possible; these pins predate current build backends and
+# several sdists no longer configure cleanly.
