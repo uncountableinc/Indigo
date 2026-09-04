@@ -90,6 +90,9 @@
             if pkgs.stdenv.hostPlatform.isAarch64 then "aarch64" else "x86_64";
           libSubdir = "${systemName}-${machineName}";
           libExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
+          # The token each loader expands to the containing binary's directory.
+          originPrefix =
+            if pkgs.stdenv.hostPlatform.isDarwin then "@loader_path" else "$ORIGIN";
 
           # setup.py accepts only this fixed set of --plat-name values and keys
           # the packaged lib/ glob off them.
@@ -107,7 +110,19 @@
             version = indigoVersion;
             inherit src;
 
-            nativeBuildInputs = [ pkgs.cmake ];
+            nativeBuildInputs = [
+              pkgs.cmake
+              pkgs.pkg-config
+            ];
+
+            # third_party/CMakeLists.txt builds the vendored freetype only under
+            # Emscripten; elsewhere third_party/cairo links system freetype and
+            # fontconfig (and hardcodes /usr/include/freetype2, which does not
+            # exist here -- the compiler wrapper supplies the real include path).
+            buildInputs = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              pkgs.freetype
+              pkgs.fontconfig
+            ];
 
             # third_party/ is vendored, so BUILD_STANDALONE=ON avoids system
             # library lookups.
@@ -122,11 +137,28 @@
               "-DBUILD_STANDALONE=ON"
               "-DENABLE_TESTS=OFF"
               "-DCMAKE_BUILD_TYPE=Release"
+
+              # The project defines no install() rules, so installPhase copies
+              # out of dist/ and CMake's install-time RPATH rewrite never runs.
+              # Without these the libs keep the absolute build-tree RPATH the
+              # linker baked in, which is both a forbidden reference on Linux
+              # and (silently) a dead path on Darwin. The four libs land in one
+              # directory, so a relative origin-based RPATH resolves them.
+              # SKIP_BUILD_RPATH drops the automatic RPATH CMake derives from
+              # link directories -- that is the absolute build-tree entry. It
+              # also drops CMAKE_BUILD_RPATH, so the relative entry we do want
+              # goes in as a plain linker flag instead (see NIX_LDFLAGS below).
+              "-DCMAKE_SKIP_BUILD_RPATH=ON"
             ];
 
             # utils/indigo-depict/main.c relies on implicit int, which modern
             # clang rejects. setup.sh passes the same flag.
             env.NIX_CFLAGS_COMPILE = "-Wno-implicit-int";
+
+            # See CMAKE_SKIP_BUILD_RPATH above. The four libs are installed
+            # side by side in one directory, so an origin-relative RPATH lets
+            # -renderer/-inchi/bingo-nosql find libindigo at runtime.
+            env.NIX_LDFLAGS = "-rpath ${originPrefix}";
 
             # CMake writes the built artifacts to <source>/dist rather than to the
             # build tree (see DIST_DIRECTORY in cmake/setup.cmake), so install from
@@ -145,6 +177,24 @@
               done
 
               runHook postInstall
+            '';
+
+            # CMAKE_INSTALL_NAME_DIR only applies to targets CMake installs,
+            # and this project defines no install() rules -- so each dylib keeps
+            # a bare "libindigo.dylib"-style install name, which dependents copy
+            # verbatim and the loader then cannot resolve from any RPATH (it
+            # only consults RPATH for @rpath/-prefixed names). Rewrite both the
+            # ids and the recorded dependencies to @rpath/ so the @loader_path
+            # RPATH above is actually used.
+            postInstall = lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+              libs=("$out"/lib/${libSubdir}/*.${libExt})
+              for lib in "''${libs[@]}"; do
+                install_name_tool -id "@rpath/$(basename "$lib")" "$lib"
+                for dep in "''${libs[@]}"; do
+                  depName=$(basename "$dep")
+                  install_name_tool -change "$depName" "@rpath/$depName" "$lib"
+                done
+              done
             '';
 
             meta = {
