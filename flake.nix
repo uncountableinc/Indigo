@@ -107,7 +107,19 @@
             version = indigoVersion;
             inherit src;
 
-            nativeBuildInputs = [ pkgs.cmake ];
+            nativeBuildInputs = [
+              pkgs.cmake
+              pkgs.pkg-config
+            ];
+
+            # third_party/CMakeLists.txt builds the vendored freetype only under
+            # Emscripten; elsewhere third_party/cairo links system freetype and
+            # fontconfig (and hardcodes /usr/include/freetype2, which does not
+            # exist here -- the compiler wrapper supplies the real include path).
+            buildInputs = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              pkgs.freetype
+              pkgs.fontconfig
+            ];
 
             # third_party/ is vendored, so BUILD_STANDALONE=ON avoids system
             # library lookups.
@@ -145,6 +157,26 @@
               done
 
               runHook postInstall
+            '';
+
+            # libindigo-renderer/-inchi/libbingo-nosql link the shared indigo
+            # target, so CMake bakes a build-tree RPATH into them. Nothing
+            # rewrites it, because installPhase copies out of dist/ rather than
+            # running `cmake --install`, and fixupPhase rejects /build/ refs.
+            # They are siblings in one directory, so $ORIGIN resolves libindigo.
+            # Must be preFixup: fixupPhase's own /build/ reference check would
+            # fail on the stale RPATH before a postFixup hook ever ran.
+            #
+            # Prepend rather than replace: libindigo-renderer also needs freetype
+            # and fontconfig from the store, and dropping those entries makes it
+            # silently resolve against the host's /usr/lib instead. Filter the
+            # build-tree entries out and keep the rest.
+            preFixup = lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+              for so in "$out"/lib/${libSubdir}/*.${libExt}; do
+                keep=$(patchelf --print-rpath "$so" | tr ':' '\n' \
+                  | grep -v '^/build' | grep -v '^$' | paste -sd: -)
+                patchelf --set-rpath "\$ORIGIN''${keep:+:$keep}" "$so"
+              done
             '';
 
             meta = {
