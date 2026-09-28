@@ -212,8 +212,30 @@ the image tag in `deploy/cicd/templater/static/k8s_resources/indigo.yaml` and
 `deploy/images/image_mappings.yaml` in the platform repo, and the three `epam.indigo` wheel URLs in
 its `pyproject.toml` (darwin arm64, linux x86_64, linux aarch64).
 
-**`.github/workflows/indigo-ci.yaml` is itself contended.** Upstream changed it between 1.34 and
-1.46 and so did we, so the workflow that publishes the artifacts is one of the files to resolve.
+**`.github/workflows/indigo-ci.yaml` is itself contended, and it is a patch set, not a patch.**
+Upstream changed it between 1.34 and 1.46 and so did we. Resolving it by taking upstream's file and
+re-applying the changes you remember is not enough — diff the whole thing against
+`indigo-1.34.0` and work through every hunk. The fork's delta covers at least:
+
+- **The service images publish to `ghcr.io/<owner>/indigo-service`, not `epmlsop/indigo-service` on
+  DockerHub.** This is the dangerous one. The platform pulls the GHCR image, and this repository
+  holds no `DOCKERHUB_*` secrets, so reverting to upstream's registry lets a tag build, test and
+  "publish" while production never sees a new image. Both service jobs also need
+  `permissions: packages: write`.
+- Both service jobs depend on `build_indigo_wrappers`, not on the bingo postgres jobs.
+- `create_github_release` exists only here.
+- No Windows in the x86_64 lib matrix, the Windows lib downloads commented out in
+  `build_indigo_wrappers`, and no `build_indigo_libs_i386` in its `needs`.
+- macOS builds on every run, not only on a tag — so its lib downloads must be ungated too, or the
+  two halves disagree.
+- CI runs on master pushes; upstream disabled that for a billing issue.
+- `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` on the cmake invocations. Take care adding it: several sit
+  in folded `/bin/sh -c` blocks whose lines end in `&&`, and appending after that `&&` makes the
+  shell run the flag as a command.
+
+After resolving, check it mechanically: the YAML parses, no job has a dangling `needs`, and every
+`download-artifact` name resolves to a producer — remembering that the lib artifact names are built
+from `OS_NAME_MAPPING_JSON`, so a runner rename breaks them silently.
 
 ## Scale of a 1.34 to 1.46 bump
 
