@@ -572,6 +572,32 @@ chemical/x-idt, chemical/x-helm."
         result_data = json.loads(result.text)
         self.assertEqual("C1C=CC=CC=1.C1C=CC=CC=1", result_data["struct"])
 
+    def test_convert_reaction_to_sdf(self):
+        # Characterisation test for MAT-73021. The chemical/x-sdf handler used
+        # to call iterateComponents() on whatever it was given, which raises
+        # "<reaction> is not a base molecule" for a reaction. Reactions now
+        # iterate their molecules instead, while plain molecules still go
+        # through iterateComponents().
+        #
+        # Without that fix the reaction case below returns an error rather than
+        # an SDF, so a merge that drops it fails here.
+        for struct, what in (("CCO>>CCC", "reaction"), ("CCO", "molecule")):
+            headers, data = self.get_headers(
+                {
+                    "struct": struct,
+                    "output_format": "chemical/x-sdf",
+                    "options": {},
+                }
+            )
+            result = requests.post(
+                self.url_prefix + "/convert", headers=headers, data=data
+            )
+            self.assertEqual(200, result.status_code, what)
+            body = result.json()
+            self.assertNotIn("error", body, what)
+            self.assertEqual("chemical/x-sdf", body["format"], what)
+            self.assertIn("V2000", body["struct"], what)
+
     def test_convert_large_cdx(self):
         ref_path = joinPathPy("ref/", __file__)
         with open(ref_path + "/large.cdx.base64") as f:

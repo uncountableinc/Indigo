@@ -26,14 +26,14 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 | Patch | Source files | Colliding | Tests |
 | --- | --- | --- | --- |
 | COP copolymer sgroup | 8 | 6 | **none** |
-| bracket export mol2000/3000 | 2 | 2 | **none** |
-| COM/MON/MIX sgroup types | 7 | 7 | **none** |
+| bracket export mol2000/3000 | 2 | 2 | `formats/unc_sgroup_bracket_export` |
+| COM/MON/MIX sgroup types | 7 | 7 | `basic/unc_sgroup_formulation_types` |
 | CDXML boronic acid (MAT-72091) | 1 | 1 | 3 |
-| SDF reaction export (MAT-73021) | 1 | 1 | **none** |
-| CIP R/S labeling (MAT-75502) | 3 | 2 | **none** |
+| SDF reaction export (MAT-73021) | 1 | 1 | `service test_convert_reaction_to_sdf` |
+| CIP R/S labeling (MAT-75502) | 3 | 2 | `basic/unc_cip_and_group_rs` |
 | CIP axial P/M (MAT-75503) | 5 | 2 | 12 |
 | CDXML collapsed geometry (MAT-77592) | 1 | 1 | 3 |
-| CIP automorphism gate (MAT-82866) | 1 | 1 | **none** |
+| CIP automorphism gate (MAT-82866) | 1 | 1 | `basic/unc_cip_symmetric_stereocentre` |
 | Abbreviation roles (MAT-77406) | 1 | 1 | 5 |
 | CDXML label styling (MAT-77102) | 2 | 2 | 20 |
 
@@ -52,15 +52,29 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 - `reaction_multistep_detector.cpp` — abbreviation roles
 - `utils/indigo-service/backend/service/v2/indigo_api.py` — SDF reaction export
 
-## Six patches have no test
+## Coverage
 
-COP copolymer, bracket export, COM/MON/MIX sgroups, SDF reaction export, CIP R/S labeling, and the
-CIP automorphism gate carry no test of their own. Nothing fails if a merge drops them. Five of the
-six sit in the most-contended files in the tree, so they are the ones to verify by reading the
-merged file rather than by running the suite.
+Every patch except COP now has a test. COP is excluded because it is being dropped — upstream
+implements it identically.
 
-Before a bump, consider landing a characterisation test for each against the current fork, so the
-merge has something to fail against.
+The five listed above were written as characterisation tests against this fork before any bump, so
+they describe behaviour that already exists rather than behaviour a merge produced. Each names, in
+its own comments, what upstream does instead, which is what makes it fail if the patch is dropped:
+
+- `unc_sgroup_formulation_types` — upstream's saver answers "SG_TYPE_MON not implemented in indigo
+  yet" and throws.
+- `unc_cip_and_group_rs` — upstream reports R or S for a racemic AND group, claiming a single
+  configuration the structure does not have.
+- `unc_cip_symmetric_stereocentre` — upstream's ungated first pass keeps a spurious R/S on a centre
+  the automorphism search rejects.
+- `unc_sgroup_bracket_export` — upstream writes `%f`, so brackets read `-0.500000` rather than
+  `-0.5`.
+- `test_convert_reaction_to_sdf` — upstream raises "<reaction> is not a base molecule".
+
+The four integration tests follow the repository's golden-output convention, with references under
+`api/tests/integration/ref/`. The service test lives in
+`utils/indigo-service/backend/service/tests/api/indigo_test.py` and runs against a running
+container, as CI already does.
 
 ## Supersession, as measured against 1.46
 
