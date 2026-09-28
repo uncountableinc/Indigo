@@ -76,9 +76,7 @@ for name, source in (
     mol = indigo.loadMolecule(source)
     written = json.loads(mol.json())
     cips = [
-        atom.get("cip")
-        for atom in written["mol0"]["atoms"]
-        if atom.get("cip")
+        atom.get("cip") for atom in written["mol0"]["atoms"] if atom.get("cip")
     ]
     print(
         "{0}: stereocentres={1} cip={2}".format(

@@ -24,8 +24,7 @@ indigo = Indigo()
 indigo.setOption("json-saving-pretty", True)
 
 
-def ket_with_sgroup(sgroup):
-    return """{
+KET_TEMPLATE = """{
   "root": { "nodes": [ { "$ref": "mol0" } ] },
   "mol0": {
     "type": "molecule",
@@ -34,11 +33,13 @@ def ket_with_sgroup(sgroup):
       { "label": "C", "location": [1.0, 0.0, 0.0] }
     ],
     "bonds": [ { "type": 1, "atoms": [0, 1] } ],
-    "sgroups": [ %s ]
+    "sgroups": [ SGROUP ]
   }
-}""" % (
-        sgroup,
-    )
+}"""
+
+
+def ket_with_sgroup(sgroup):
+    return KET_TEMPLATE.replace("SGROUP", sgroup)
 
 
 CASES = (
