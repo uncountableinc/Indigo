@@ -1107,31 +1107,6 @@ void MoleculeJsonLoader::parseSGroups(const rapidjson::Value& sgroups, BaseMolec
                 dsg.num_chars = s["displayedChars"].GetInt();
         }
         break;
-        case SGroup::SG_TYPE_COP: {
-            CopolymerGroup& ru = (CopolymerGroup&)sgroup;
-            if (s.HasMember("subtype"))
-            {
-                std::string conn = s["subtype"].GetString();
-                if (conn == "RAN")
-                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_RAN;
-                else if (conn == "ALT")
-                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_ALT;
-                else if (conn == "BLO")
-                    ru.sgroup_subtype = SGroup::SG_SUBTYPE_BLO;
-            }
-
-            if (s.HasMember("connectivity"))
-            {
-                std::string conn = s["connectivity"].GetString();
-                if (conn == "HT")
-                    ru.connectivity = RepeatingUnit::HEAD_TO_TAIL;
-                else if (conn == "HH")
-                    ru.connectivity = RepeatingUnit::HEAD_TO_HEAD;
-                else if (conn == "EU")
-                    ru.connectivity = RepeatingUnit::EITHER;
-            }
-        }
-        break;
         case SGroup::SG_TYPE_MON:
             // no special parameters
             break;
