@@ -1,0 +1,7 @@
+*** formulation s-group types survive a KET round trip ***
+MON: atoms=2 type_in_output=True
+    reload ok: atoms=2 bonds=1
+COM: atoms=2 type_in_output=True
+    reload ok: atoms=2 bonds=1
+MIX: atoms=2 type_in_output=True
+    reload ok: atoms=2 bonds=1
