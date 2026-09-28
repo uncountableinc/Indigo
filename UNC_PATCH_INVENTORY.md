@@ -232,6 +232,19 @@ re-applying the changes you remember is not enough — diff the whole thing agai
 - `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` on the cmake invocations. Take care adding it: several sit
   in folded `/bin/sh -c` blocks whose lines end in `&&`, and appending after that `&&` makes the
   shell run the flag as a command.
+- **21 jobs are switched off**, each marked `# unc: skip` above an `if: ${{ false }}` — the java,
+  dotnet and i386 test jobs, the bingo elastic, oracle, postgres and sqlserver jobs, and the mingw
+  build. Grep for `# unc: skip` to find them.
+- **The four public-registry publish jobs are switched off too**, by appending `&& false` to their
+  tag condition: `publish_indigo_to_{pypi,nuget,npm,maven}`. Re-enabling them would push this
+  fork's build to PyPI, NuGet, npm and Maven under upstream's names. Check these first after any
+  merge that touches the workflow.
+- The `docker run` that tests the service image passes `-e CELERYD_OPTS` and
+  `-e GUNICORN_CMD_ARGS`. Those pair with the two supervisor configs above: the configs reference
+  `%(ENV_...)s`, and supervisord refuses to start if the variable is missing, so keeping the
+  configs without the `-e` flags makes the container exit immediately. Because the run uses
+  `--rm`, the container is gone before `docker logs` runs, and CI only reports
+  `No such container: indigo_service`.
 
 After resolving, check it mechanically: the YAML parses, no job has a dangling `needs`, and every
 `download-artifact` name resolves to a producer — remembering that the lib artifact names are built
