@@ -823,8 +823,9 @@ void SmilesSaver::_writeAtom(int idx, bool /*aromatic*/, bool lowercase, int chi
                     throw Error("atom list can be used only with smarts_mode");
             }
         }
-
-        throw Error("undefined atom number");
+        // any undefined atom
+        _output.printf("*");
+        return;
     }
 
     if (inside_rsmiles)
@@ -848,10 +849,11 @@ void SmilesSaver::_writeAtom(int idx, bool /*aromatic*/, bool lowercase, int chi
             hydro = _hcount[idx];
             if (hydro < 0 && !ignore_invalid_hcount && need_brackets)
             {
-                // This function will throw better error message with a description
+                // This function will throw a more descriptive error from calcValence
                 _mol->getImplicitH(idx);
-                // If not error was thrown then throw it explicitly
-                throw Error("unsure hydrogen count on atom #%d", idx);
+                // If getImplicitH didn't throw, throw with atom details
+                throw Error("unsure hydrogen count on atom #%d, element %s, charge %d, connectivity %d", idx, Element::toString(atom_number), charge,
+                            _mol->getAtomConnectivity_noImplH(idx));
             }
         }
     }
@@ -874,7 +876,20 @@ void SmilesSaver::_writeAtom(int idx, bool /*aromatic*/, bool lowercase, int chi
             hydro = _hcount[idx];
 
             if (hydro < 0 && !ignore_invalid_hcount)
-                throw Error("unsure hydrogen count on atom #%d", idx);
+            {
+                // Try to get a more informative error from getImplicitH
+                try
+                {
+                    _mol->getImplicitH(idx);
+                }
+                catch (Exception&)
+                {
+                    throw;
+                }
+                // If getImplicitH didn't throw, throw with atom details
+                throw Error("unsure hydrogen count on atom #%d, element %s, charge %d, connectivity %d", idx, Element::toString(atom_number), charge,
+                            _mol->getAtomConnectivity_noImplH(idx));
+            }
         }
         if (chirality > 0 && hydro > 1)
         {
@@ -1545,19 +1560,26 @@ void SmilesSaver::writePseudoAtoms(int atoms_offset, bool have_separators)
 
 void SmilesSaver::writePseudoAtom(const char* label, Output& out)
 {
+    std::unordered_set<std::string> pseudo_atoms = {"AH", "QH", "M", "MH", "X", "XH", "Pol"};
+    const auto star_label = "star_e";
     if (*label == 0)
         throw Error("empty pseudo-atom");
 
-    do
-    {
-        if (*label == '\n' || *label == '\r' || *label == '\t')
-            throw Error("character 0x%x is not allowed inside pseudo-atom", *label);
-        if (*label == '$' || *label == ';')
-            throw Error("'%c' not allowed inside pseudo-atom", *label);
+    if (const char* p = std::strpbrk(label, "\n\r\t"))
+        throw Error("character 0x%x is not allowed inside pseudo-atom", static_cast<unsigned char>(*p));
 
-        out.writeChar(*label);
-    } while (*(++label) != 0);
-    //   out.writeString("_p");
+    if (const char* p = std::strpbrk(label, "$;"))
+        throw Error("'%c' not allowed inside pseudo-atom", *p);
+
+    if (pseudo_atoms.count(label) > 0)
+    {
+        out.writeString(label);
+        out.writeString("_p");
+    }
+    else if (std::string(label) == "*")
+        out.writeString(star_label); // everything else is converted to star_e
+    else
+        out.writeString(label);
 }
 
 void SmilesSaver::writeSpecialAtom(int aid, Output& out)
@@ -1838,7 +1860,7 @@ void SmilesSaver::_writeSGroups()
                 if (dsg.description.size() > 0)
                     _output.writeString(dsg.description.ptr());
                 _output.writeChar(':');
-                _output.writeChar(dsg.tag);
+                _output.writeChar(dsg.tag.value_or(0));
                 _output.writeChar(':');
                 // No coords output for now
             }
@@ -1852,8 +1874,9 @@ void SmilesSaver::_writeSGroups()
             RepeatingUnit& ru = static_cast<RepeatingUnit&>(sg);
             _output.writeString("n:");
             _writeSGroupAtoms(sg);
-            _output.printf(":%s:", ru.subscript.ptr() ? ru.subscript.ptr() : "");
-            switch (ru.connectivity)
+            _output.printf(":%s:", ru.label.ptr() ? ru.label.ptr() : "");
+            const int connectivity = ru.connectivity.value_or(RepeatingUnit::HEAD_TO_TAIL);
+            switch (connectivity)
             {
             case SGroup::HEAD_TO_TAIL:
                 _output.writeString("ht");

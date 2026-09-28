@@ -1,5 +1,5 @@
 # Visual Studio Code
-.vscode
+# .vscode
 
 # Rider
 .idea
@@ -104,3 +104,6 @@ indigo.kdev4
 debug/
 .direnv
 .venv
+
+.claude/settings.local.json
+.claude/.cache/

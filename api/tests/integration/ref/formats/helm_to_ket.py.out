@@ -2,12 +2,15 @@
 helm_2818.ket:SUCCEED
 helm_2826.ket:SUCCEED
 helm_alias.ket:SUCCEED
+helm_alias_ambiguous.ket:SUCCEED
+helm_alias_single_r_p.ket:SUCCEED
 helm_aminoacids_variants.ket:SUCCEED
 helm_annotations.ket:SUCCEED
 helm_any_chem.ket:SUCCEED
 helm_chem_peptide.ket:SUCCEED
 helm_chem_rna.ket:SUCCEED
 helm_chem_rna_hydro.ket:SUCCEED
+helm_double_strand.ket:SUCCEED
 helm_fractional_ratio.ket:SUCCEED
 helm_mixed_base.ket:SUCCEED
 helm_mixed_custom.ket:SUCCEED
@@ -18,8 +21,10 @@ helm_nucleosides.ket:SUCCEED
 helm_only_base.ket:SUCCEED
 helm_peptide.ket:SUCCEED
 helm_rna_without_base.ket:SUCCEED
+helm_rsite_no_brackets.ket:SUCCEED
 helm_simple_rna.ket:SUCCEED
 helm_smiles.ket:SUCCEED
+helm_smiles_first.ket:SUCCEED
 helm_smiles_no_ap.ket:SUCCEED
 helm_smiles_sugar.ket:SUCCEED
 helm_unresolved.ket:SUCCEED

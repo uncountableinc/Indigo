@@ -34,9 +34,11 @@
 #include "common/utils/emf_utils.h"
 #include "elements.h"
 #include "molecule/base_molecule.h"
+#include "molecule/loader_options.h"
 #include "molecule/meta_commons.h"
 #include "molecule/molecule_stereocenter_options.h"
 #include "molecule/query_molecule.h"
+#include "molecule/valence_model.h"
 
 typedef unsigned short int UINT16;
 typedef int INT32;
@@ -132,8 +134,8 @@ namespace indigo
     struct CdxmlNode
     {
         CdxmlNode()
-            : element(ELEM_C), type(kCDXNodeType_Element), enchanced_stereo(EnhancedStereoType::UNSPECIFIED), is_not_list(false),
-              has_fragment(false) // Carbon by default
+            : element(ELEM_C), type(kCDXNodeType_Element), enchanced_stereo(EnhancedStereoType::UNSPECIFIED), is_not_list(false), has_fragment(false),
+              showAtomStereo(false), hydrogens(-1) // Carbon by default
         {
         }
 
@@ -148,6 +150,7 @@ namespace indigo
         AutoInt valence;
         AutoInt hydrogens;
         AutoInt stereo;
+        bool showAtomStereo;
         EnhancedStereoType enchanced_stereo;
         AutoInt enhanced_stereo_group;
         AutoInt index;
@@ -942,8 +945,13 @@ namespace indigo
 
         std::unordered_map<int, int> idToAtomIndexMap() const;
 
+        // Bulk options propagation. See LoaderOptions doc for the field set.
+        void setOptions(const LoaderOptions& opts);
+        LoaderOptions getOptions() const;
+
         StereocentersOptions stereochemistry_options;
         bool ignore_bad_valence;
+        ValenceMode valence_mode;
         Rect2f cdxml_bbox;
         AutoInt cdxml_bond_length;
         std::vector<CdxmlNode> nodes;

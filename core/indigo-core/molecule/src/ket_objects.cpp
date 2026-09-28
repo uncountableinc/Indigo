@@ -172,7 +172,7 @@ IMPL_ERROR(KetRUSGroup, "Ket RU SGroup")
 const std::map<std::string, int>& KetRUSGroup::getStringPropStrToIdx() const
 {
     static std::map<std::string, int> str_to_idx{
-        {"subscript", toUType(StringProps::subscript)},
+        {"subscript", toUType(StringProps::label)},
     };
     return str_to_idx;
 };
@@ -303,16 +303,15 @@ void KetMolecule::parseKetAtoms(KetMolecule::atoms_type& ket_atoms, const rapidj
         if (atom_type == "atom")
         {
             ket_atoms.push_back(std::make_unique<KetAtom>(atom["label"].GetString()));
-            auto base_atom = ket_atoms.rbegin();
+            atom_ptr = ket_atoms.rbegin()->get();
             if (query_props.has_value())
-                static_cast<KetAtom*>(base_atom->get())->setQueryProperties(query_props.value());
-            atom_ptr = base_atom->get();
+                static_cast<KetAtom*>(atom_ptr)->setQueryProperties(query_props.value());
         }
         else if (atom_type == "rg-label")
         {
             ket_atoms.push_back(std::make_unique<KetRgLabel>());
-            auto rg_label = ket_atoms.rbegin();
-            KetRgLabel* r_ptr = static_cast<KetRgLabel*>(rg_label->get());
+            atom_ptr = ket_atoms.rbegin()->get();
+            KetRgLabel* r_ptr = static_cast<KetRgLabel*>(atom_ptr);
             if (atom.HasMember("$refs"))
             {
                 auto& refs = atom["$refs"];
@@ -343,6 +342,7 @@ void KetMolecule::parseKetAtoms(KetMolecule::atoms_type& ket_atoms, const rapidj
                 elem_list.emplace_back(elements[j].GetString());
             }
             ket_atoms.push_back(std::make_unique<KetAtomList>(elem_list));
+            atom_ptr = ket_atoms.rbegin()->get();
             // auto& base_atom = ket_atoms.rbegin();
             // if (query_props.has_value())
             //     static_cast<KetBaseAtom*>(base_atom->get())->setQueryProperties(query_props.value());
@@ -364,7 +364,8 @@ void KetMolecule::parseKetAtoms(KetMolecule::atoms_type& ket_atoms, const rapidj
             }
         }
 
-        atom_ptr->parseOptsFromKet(atom);
+        if (atom_type != "rg-label")
+            static_cast<KetBaseAtom*>(atom_ptr)->parseOptsFromKet(atom);
     }
 }
 
@@ -441,7 +442,22 @@ void KetBaseMonomer::disconnectAttachmentPoint(const std::string& ap_id)
         _connections_to_molecules.erase(ap_id);
     else
         throw Error("Attachment point '%s' is not connected", ap_id.c_str());
-};
+}
+
+bool KetBaseMonomer::selected() const
+{
+    auto& map = getBoolPropStrToIdx();
+    const auto& it = map.find("selected");
+    return it != map.end() && hasBoolProp(it->second) && getBoolProp(it->second);
+}
+
+const std::map<std::string, int>& KetBaseMonomer::getIntPropStrToIdx() const
+{
+    static std::map<std::string, int> str_to_idx{
+        {"seqid", toUType(IntProps::seqid)},
+    };
+    return str_to_idx;
+}
 
 IMPL_ERROR(KetMonomer, "Ket Monomer")
 
@@ -454,24 +470,14 @@ const std::map<std::string, int>& KetMonomer::getBoolPropStrToIdx() const
     return str_to_idx;
 }
 
-const std::map<std::string, int>& KetMonomer::getIntPropStrToIdx() const
-{
-    static std::map<std::string, int> str_to_idx{
-        {"seqid", toUType(IntProps::seqid)},
-    };
-    return str_to_idx;
-}
-
 IMPL_ERROR(KetConnectionEndPoint, "Ket Connection End Point")
 
 const std::map<std::string, int>& KetConnectionEndPoint::getStringPropStrToIdx() const
 {
     static std::map<std::string, int> str_to_idx{
-        {"groupId", toUType(StringProps::groupId)},
-        {"monomerId", toUType(StringProps::monomerId)},
-        {"moleculeId", toUType(StringProps::moleculeId)},
-        {"atomId", toUType(StringProps::atomId)},
-        {"attachmentPointId", toUType(StringProps::attachmentPointId)},
+        {"groupId", toUType(StringProps::groupId)},     {"templateId", toUType(StringProps::templateId)},
+        {"monomerId", toUType(StringProps::monomerId)}, {"moleculeId", toUType(StringProps::moleculeId)},
+        {"atomId", toUType(StringProps::atomId)},       {"attachmentPointId", toUType(StringProps::attachmentPointId)},
     };
     return str_to_idx;
 }
@@ -521,18 +527,18 @@ const std::map<std::string, int>& KetConnection::getBoolPropStrToIdx() const
 
 IMPL_ERROR(KetAmbiguousMonomer, "Ket Ambiguous Monomer")
 
-const std::map<std::string, int>& KetAmbiguousMonomer::getIntPropStrToIdx() const
-{
-    static std::map<std::string, int> str_to_idx{
-        {"seqid", toUType(IntProps::seqid)},
-    };
-    return str_to_idx;
-}
-
 const std::map<std::string, int>& KetAmbiguousMonomer::getStringPropStrToIdx() const
 {
     static std::map<std::string, int> str_to_idx{
         {"alias", toUType(StringProps::alias)},
+    };
+    return str_to_idx;
+}
+
+const std::map<std::string, int>& KetAmbiguousMonomer::getBoolPropStrToIdx() const
+{
+    static std::map<std::string, int> str_to_idx{
+        {"selected", toUType(BoolProps::selected)},
     };
     return str_to_idx;
 }

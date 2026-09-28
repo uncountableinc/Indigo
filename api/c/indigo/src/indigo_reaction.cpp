@@ -136,14 +136,14 @@ const char* IndigoReaction::debugInfo() const
     return "";
 }
 
-IndigoReaction::~IndigoReaction()
-{
-}
-
 void IndigoReaction::init(std::unique_ptr<BaseReaction>&& reaction)
 {
     rxn = reaction ? std::move(reaction) : std::make_unique<Reaction>();
     _properties.copy(rxn->properties());
+}
+
+IndigoReaction::~IndigoReaction()
+{
 }
 
 Reaction& IndigoReaction::getReaction()
@@ -171,6 +171,7 @@ const char* IndigoReaction::getName()
 
 IndigoQueryReaction::IndigoQueryReaction() : IndigoBaseReaction(QUERY_REACTION)
 {
+    init();
 }
 
 const char* IndigoQueryReaction::debugInfo() const
@@ -184,19 +185,25 @@ IndigoQueryReaction::~IndigoQueryReaction()
 
 BaseReaction& IndigoQueryReaction::getBaseReaction()
 {
-    return rxn;
+    return *rxn;
 }
 
 QueryReaction& IndigoQueryReaction::getQueryReaction()
 {
-    return rxn;
+    return rxn->asQueryReaction();
 }
 
 const char* IndigoQueryReaction::getName()
 {
-    if (rxn.name.ptr() == 0)
+    if (rxn->name.ptr() == 0)
         return "";
-    return rxn.name.ptr();
+    return rxn->name.ptr();
+}
+
+void IndigoQueryReaction::init(std::unique_ptr<BaseReaction>&& reaction)
+{
+    rxn = reaction ? std::move(reaction) : std::make_unique<QueryReaction>();
+    _properties.copy(rxn->properties());
 }
 
 //
@@ -347,9 +354,14 @@ IndigoObject* IndigoReactionIter::next()
 
     if (_subtype == REACTION)
     {
-        auto reaction = new IndigoReaction();
-        reaction->init(_rxn.getBaseReaction(_idx));
-        return reaction;
+        auto rc = _rxn.getBaseReaction(_idx);
+        IndigoBaseReaction* pbt = nullptr;
+        if (rc->isQueryReaction())
+            pbt = new IndigoQueryReaction();
+        else
+            pbt = new IndigoReaction();
+        pbt->init(_rxn.getBaseReaction(_idx));
+        return pbt;
     }
     else if (_map)
     {
@@ -396,7 +408,7 @@ IndigoQueryReaction* IndigoQueryReaction::cloneFrom(IndigoObject& obj)
     QueryReaction& rxn = obj.getQueryReaction();
 
     std::unique_ptr<IndigoQueryReaction> rxnptr = std::make_unique<IndigoQueryReaction>();
-    rxnptr->rxn.clone(rxn, 0, 0, 0);
+    rxnptr->rxn->clone(rxn, 0, 0, 0);
 
     try
     {
@@ -459,12 +471,11 @@ CEXPORT int indigoLoadReactionWithLib(int source, int monomer_library)
 
         ReactionAutoLoader loader(scanner);
 
-        loader.stereochemistry_options = self.stereochemistry_options;
-        loader.treat_x_as_pseudoatom = self.treat_x_as_pseudoatom;
-        loader.ignore_noncritical_query_features = self.ignore_noncritical_query_features;
+        loader.setOptions(self.loaderOptions());
         loader.dearomatize_on_load = self.dearomatize_on_load;
         loader.arom_options = self.arom_options;
         loader.layout_options = self.layout_options;
+        loader.input_format = self.input_format;
         auto rxn = loader.loadReaction(false);
         std::unique_ptr<IndigoBaseReaction> rxnptr;
         if (rxn->isPathwayReaction())
@@ -538,16 +549,16 @@ CEXPORT int indigoLoadQueryReactionWithLib(int source, int monomer_library)
 
         ReactionAutoLoader loader(scanner);
 
-        loader.stereochemistry_options = self.stereochemistry_options;
-        loader.treat_x_as_pseudoatom = self.treat_x_as_pseudoatom;
+        loader.setOptions(self.loaderOptions());
         loader.dearomatize_on_load = self.dearomatize_on_load;
         loader.arom_options = self.arom_options;
+        loader.input_format = self.input_format;
 
         MonomerTemplateLibrary* monomer_lib = nullptr;
         if (monomer_library >= 0)
             monomer_lib = &IndigoMonomerLibrary::get(self.getObject(monomer_library));
         std::unique_ptr<IndigoQueryReaction> rxnptr = std::make_unique<IndigoQueryReaction>();
-        loader.loadReaction(rxnptr->rxn, monomer_lib);
+        loader.loadReaction(*(rxnptr->rxn.get()), monomer_lib);
         return self.addObject(rxnptr.release());
     }
     INDIGO_END(-1);
@@ -949,7 +960,7 @@ CEXPORT int indigoLoadReactionSmarts(int source)
 
         std::unique_ptr<IndigoQueryReaction> rxnptr = std::make_unique<IndigoQueryReaction>();
 
-        QueryReaction& qrxn = rxnptr->rxn;
+        QueryReaction& qrxn = rxnptr->rxn->asQueryReaction();
 
         loader.smarts_mode = true;
         loader.loadQueryReaction(qrxn);

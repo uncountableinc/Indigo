@@ -425,10 +425,19 @@ M  END\n",
             data="c1ccccc2",
         )
         self.assertEqual(400, result.status_code)
-        self.assertEqual(
-            "struct data not recognized as molecule, query, reaction or reaction query",
-            result.text,
+
+    def test_wrong_input_format_3220(self):
+        result = requests.post(
+            self.url_prefix + "/convert",
+            headers={
+                "Content-Type": "chemical/x-mdl-molfile",
+                "Accept": "chemical/x-indigo-ket",
+            },
+            data="sdfsdfsdf",
         )
+        self.assertEqual(400, result.status_code)
+        # Error message comes from the molfile parser directly
+        self.assertTrue(len(result.text) > 0)
 
     def test_headers_is_rxn(self):
         result = requests.post(
@@ -480,7 +489,7 @@ chemical/x-iupac, chemical/x-daylight-smarts, chemical/x-inchi-aux, chemical/x-c
 chemical/x-cdxml, chemical/x-cdx, chemical/x-sdf, chemical/x-rdf, chemical/x-peptide-sequence, \
 chemical/x-peptide-sequence-3-letter, chemical/x-rna-sequence, chemical/x-dna-sequence, chemical/x-sequence, \
 chemical/x-peptide-fasta, chemical/x-rna-fasta, chemical/x-dna-fasta, chemical/x-fasta, \
-chemical/x-idt, chemical/x-helm."
+chemical/x-idt, chemical/x-helm, chemical/x-biln, chemical/x-monomer-library, chemical/x-axo-labs."
         expected_text = (
             "ValidationError: {'input_format': ['Must be one of: %s']}"
             % formats
@@ -2425,13 +2434,13 @@ M  END
                 self.assertEqual(result_json.text, ref_json)
 
     def test_calculate_selected(self):
+        ketdata = """{"root":{"nodes":[{"$ref":"mol0"}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[9,7,0],"selected":true},{"label":"C","location":[9,6,0]}],"bonds":[{"type":1,"atoms":[0,1]}]}}"""
         headers, data = self.get_headers(
             {
-                "struct": "CC",
-                "input_format": "chemical/x-mdl-molfile",
-                "selected": [
-                    0,
-                ],
+                "struct": ketdata,
+                "input_format": "chemical/x-indigo-ket",
+                "selected": [],
                 "properties": (
                     "molecular-weight",
                     "gross",
@@ -2449,10 +2458,14 @@ M  END
         self.assertEqual("C 79.89 H 20.11", result_data["mass-composition"])
 
     def test_calculate_selected_benzene(self):
+        ketdata = """{"root":{"nodes":[{"$ref":"mol0"}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[8,7,0],"selected":true},{"label":"N","location":[7,7,0]},{"label":"C","location":[8,6,0],"selected":true},
+{"label":"C","location":[9,6,0],"selected":true},{"label":"C","location":[10,7,0],"selected":true},{"label":"C","location":[9,8,0],"selected":true},{"label":"C","location":[8,8,0],"selected":true}],
+"bonds":[{"type":1,"atoms":[0,1]},{"type":2,"atoms":[0,2]},{"type":1,"atoms":[2,3]},{"type":2,"atoms":[3,4]},{"type":1,"atoms":[4,5]},{"type":2,"atoms":[5,6]},{"type":1,"atoms":[6,0]}]}}"""
         headers, data = self.get_headers(
             {
-                "struct": "C1(N)=CC=CC=C1",
-                "selected": [0, 2, 3, 4, 5, 6],
+                "struct": ketdata,
+                "selected": [],
                 "properties": [
                     "molecular-weight",
                     "most-abundant-mass",
@@ -2474,12 +2487,7 @@ M  END
     def test_calculate_empty(self):
         headers, data = self.get_headers(
             {
-                "struct": """
-  Ketcher 10211616132D 1   1.00000     0.00000     0
-
-  0  0  0     0  0            999 V2000
-M  END
-""",
+                "struct": """{"root":{"nodes":[],"connections":[],"templates":[]}}""",
                 "properties": [
                     "molecular-weight",
                     "most-abundant-mass",
@@ -2503,7 +2511,10 @@ M  END
     def test_calculate_selected_benzene_2(self):
         headers, data = self.get_headers(
             {
-                "struct": "C1=CC=CC=C1",
+                "struct": """{"root":{"nodes":[{"$ref":"mol0"}],"connections":[],"templates":[]},"mol0":{"type":"molecule","atoms":[
+{"label":"C","location":[0,1,0],"selected":true},{"label":"C","location":[1,2,0]},{"label":"C","location":[2,2,0]},
+{"label":"C","location":[3,1,0]},{"label":"C","location":[2,0,0]},{"label":"C","location":[1,0,0]}],
+"bonds":[{"type":2,"atoms":[0,1]},{"type":1,"atoms":[1,2]},{"type":2,"atoms":[2,3]},{"type":1,"atoms":[3,4]},{"type":2,"atoms":[4,5]},{"type":1,"atoms":[5,0]}]}}""",
                 "properties": [
                     "molecular-weight",
                     "most-abundant-mass",
@@ -2511,9 +2522,7 @@ M  END
                     "gross",
                     "mass-composition",
                 ],
-                "selected": [
-                    0,
-                ],
+                "selected": [],
             }
         )
         result = requests.post(
@@ -2555,39 +2564,15 @@ M  END
         )
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["gross"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["molecular-weight"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["most-abundant-mass"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["monoisotopic-mass"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["mass-composition"],
-        )
+        self.assertEqual("C2 H3", result_data["gross"])
+        self.assertEqual("27.0459994", result_data["molecular-weight"])
+        self.assertEqual("27.0454744", result_data["most-abundant-mass"])
+        self.assertEqual("27.0454744", result_data["monoisotopic-mass"])
+        self.assertEqual("C 88.82 H 11.18", result_data["mass-composition"])
 
     def test_calculate_query_mol_selected(self):
-        mol = """
-  Ketcher 11081614252D 1   1.00000     0.00000     0
-
-  3  2  0     0  0            999 V2000
-    6.4500   -4.5500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    7.4500   -4.5500    0.0000 Q   0  0  0  0  0  0  0  0  0  0  0  0
-    7.9500   -5.4160    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  8  0     0  0
-  2  3  1  0     0  0
-M  END
-"""
+        mol = """{"root":{"nodes":[{"$ref":"mol0"}],"connections":[],"templates":[]},"mol0":{"type":"molecule","atoms":[
+{"label":"C","location":[0,0,0],"selected":true},{"label":"Q","location":[1,0,0]},{"label":"C","location":[2,0,0]}],"bonds":[{"type":8,"atoms":[0,1]},{"type":1,"atoms":[1,2]}]}}"""
         headers, data = self.get_headers(
             {
                 "struct": mol,
@@ -2598,9 +2583,7 @@ M  END
                     "gross",
                     "mass-composition",
                 ],
-                "selected": [
-                    0,
-                ],
+                "selected": [],
             }
         )
         result = requests.post(
@@ -2608,26 +2591,14 @@ M  END
         )
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["gross"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["molecular-weight"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["most-abundant-mass"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["monoisotopic-mass"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["mass-composition"],
-        )
+        self.assertEqual("C", result_data["gross"])
+        self.assertEqual("12.0109997", result_data["molecular-weight"])
+        self.assertEqual("12.0109997", result_data["most-abundant-mass"])
+        self.assertEqual("12.0109997", result_data["monoisotopic-mass"])
+        self.assertEqual("C 100.00", result_data["mass-composition"])
+
+        mol = """{"root":{"nodes":[{"$ref":"mol0"}],"connections":[],"templates":[]},"mol0":{"type":"molecule","atoms":[
+{"label":"C","location":[0,0,0]},{"label":"Q","location":[1,0,0]},{"label":"C","location":[2,0,0],"selected":true}],"bonds":[{"type":8,"atoms":[0,1]},{"type":1,"atoms":[1,2]}]}}"""
         headers, data = self.get_headers(
             {
                 "struct": mol,
@@ -2638,9 +2609,7 @@ M  END
                     "gross",
                     "mass-composition",
                 ],
-                "selected": [
-                    2,
-                ],
+                "selected": [],
                 "options": {
                     "molfile-saving-add-mrv-sma": False,
                 },
@@ -2653,8 +2622,8 @@ M  END
         result_data = json.loads(result.text)
         self.assertEqual("C H3", result_data["gross"])
         self.assertEqual("15.0349997", result_data["molecular-weight"])
-        self.assertEqual("15.0234751", result_data["most-abundant-mass"])
-        self.assertEqual("15.0234751", result_data["monoisotopic-mass"])
+        self.assertEqual("15.0344747", result_data["most-abundant-mass"])
+        self.assertEqual("15.0344747", result_data["monoisotopic-mass"])
         self.assertEqual("C 79.89 H 20.11", result_data["mass-composition"])
 
     def test_calculate_query_rxn(self):
@@ -2703,58 +2672,26 @@ M  END
         )
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
+        self.assertEqual("[C2 H3] > [C2 H7 N]", result_data["gross"])
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["gross"],
+            "[27.0459994] > [45.0849994]", result_data["molecular-weight"]
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["molecular-weight"],
+            "[27.0454744] > [45.0837744]", result_data["most-abundant-mass"]
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["most-abundant-mass"],
+            "[27.0454744] > [45.0837744]", result_data["monoisotopic-mass"]
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
-            result_data["monoisotopic-mass"],
-        )
-        self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[C 88.82 H 11.18] > [C 53.28 H 15.65 N 31.07]",
             result_data["mass-composition"],
         )
 
     def test_calculate_query_rxn_selected(self):
-        rxn = """$RXN
-
-
-
-  1  1  0
-$MOL
-
-  Ketcher 11081614532D 1   1.00000     0.00000     0
-
-  3  2  0     0  0            999 V2000
-    0.0000    0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.8660   -0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.7321    0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  2  3  1  0     0  0
-  1  2  8  0     0  0
-M  END
-$MOL
-
-  Ketcher 11081614532D 1   1.00000     0.00000     0
-
-  4  3  0     0  0            999 V2000
-    7.7321    0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    8.5980   -0.2500    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
-    9.4641    0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   10.3301   -0.2500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0     0  0
-  2  3  1  0     0  0
-  3  4  1  0     0  0
-M  END
-"""
+        rxn = """{"root":{"nodes":[{"$ref":"mol0"},{"$ref":"mol1"},
+{"type":"arrow","data":{"mode":"open-angle","pos":[{"x":4,"y":3,"z":0},{"x":8,"y":3,"z":0}]}}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[2,4,0],"selected":true},{"label":"C","location":[2,3,0]},{"label":"C","location":[3,4,0]}],"bonds":[{"type":1,"atoms":[1,2]},{"type":8,"atoms":[0,1]}]},
+"mol1":{"type":"molecule","atoms":[{"label":"C","location":[9,4,0]},{"label":"N","location":[10,3,0]},{"label":"C","location":[11,4,0]},{"label":"C","location":[12,3,0]}],"bonds":[{"type":1,"atoms":[0,1]},{"type":1,"atoms":[1,2]},{"type":1,"atoms":[2,3]}]}}"""
         headers, data = self.get_headers(
             {
                 "struct": rxn,
@@ -2765,9 +2702,7 @@ M  END
                     "gross",
                     "mass-composition",
                 ],
-                "selected": [
-                    0,
-                ],
+                "selected": [],
             }
         )
         result = requests.post(
@@ -2776,25 +2711,29 @@ M  END
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[C] > ",
             result_data["gross"],
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[12.0109997] > ",
             result_data["molecular-weight"],
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[12.0109997] > ",
             result_data["most-abundant-mass"],
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[12.0109997] > ",
             result_data["monoisotopic-mass"],
         )
         self.assertEqual(
-            "Cannot calculate properties for structures with query features",
+            "[C 100.00] > ",
             result_data["mass-composition"],
         )
+        rxn = """{"root":{"nodes":[{"$ref":"mol0"},{"$ref":"mol1"},
+{"type":"arrow","data":{"mode":"open-angle","pos":[{"x":4,"y":3,"z":0},{"x":8,"y":3,"z":0}]}}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[2,4,0]},{"label":"C","location":[2,3,0]},{"label":"C","location":[3,4,0],"selected":true}],"bonds":[{"type":1,"atoms":[1,2]},{"type":8,"atoms":[0,1]}]},
+"mol1":{"type":"molecule","atoms":[{"label":"C","location":[9,4,0]},{"label":"N","location":[10,3,0]},{"label":"C","location":[11,4,0]},{"label":"C","location":[12,3,0]}],"bonds":[{"type":1,"atoms":[0,1]},{"type":1,"atoms":[1,2]},{"type":1,"atoms":[2,3]}]}}"""
         headers, data = self.get_headers(
             {
                 "struct": rxn,
@@ -2818,11 +2757,17 @@ M  END
         )
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
-        self.assertEqual("C H3", result_data["gross"])
-        self.assertEqual("15.0349997", result_data["molecular-weight"])
-        self.assertEqual("15.0234751", result_data["most-abundant-mass"])
-        self.assertEqual("15.0234751", result_data["monoisotopic-mass"])
-        self.assertEqual("C 79.89 H 20.11", result_data["mass-composition"])
+        self.assertEqual("[C H3] > ", result_data["gross"])
+        self.assertEqual("[15.0349997] > ", result_data["molecular-weight"])
+        self.assertEqual("[15.0344747] > ", result_data["most-abundant-mass"])
+        self.assertEqual("[15.0344747] > ", result_data["monoisotopic-mass"])
+        self.assertEqual(
+            "[C 79.89 H 20.11] > ", result_data["mass-composition"]
+        )
+        rxn = """{"root":{"nodes":[{"$ref":"mol0"},{"$ref":"mol1"},
+{"type":"arrow","data":{"mode":"open-angle","pos":[{"x":4,"y":3,"z":0},{"x":8,"y":3,"z":0}]}}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[2,4,0]},{"label":"C","location":[2,3,0]},{"label":"C","location":[3,4,0],"selected":true}],"bonds":[{"type":1,"atoms":[1,2]},{"type":8,"atoms":[0,1]}]},
+"mol1":{"type":"molecule","atoms":[{"label":"C","location":[9,4,0],"selected":true},{"label":"N","location":[10,3,0],"selected":true},{"label":"C","location":[11,4,0],"selected":true},{"label":"C","location":[12,3,0]}],"bonds":[{"type":1,"atoms":[0,1]},{"type":1,"atoms":[1,2]},{"type":1,"atoms":[2,3]}]}}"""
         headers, data = self.get_headers(
             {
                 "struct": rxn,
@@ -2833,7 +2778,7 @@ M  END
                     "gross",
                     "mass-composition",
                 ],
-                "selected": [2, 3, 4, 5],
+                "selected": [],
                 "options": {
                     "molfile-saving-add-mrv-sma": False,
                 },
@@ -2844,27 +2789,28 @@ M  END
         )
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
-        self.assertEqual("C H3; C2 H6 N", result_data["gross"])
+        self.assertEqual("[C H3] > [C2 H6 N]", result_data["gross"])
         self.assertEqual(
-            "15.0349997; 44.0769994", result_data["molecular-weight"]
+            "[15.0349997] > [44.0769994]", result_data["molecular-weight"]
         )
         self.assertEqual(
-            "15.0234751; 44.0500238", result_data["most-abundant-mass"]
+            "[15.0344747] > [44.0759494]", result_data["most-abundant-mass"]
         )
         self.assertEqual(
-            "15.0234751; 44.0500238", result_data["monoisotopic-mass"]
+            "[15.0344747] > [44.0759494]", result_data["monoisotopic-mass"]
         )
         self.assertEqual(
-            "C 79.89 H 20.11; C 54.50 H 13.72 N 31.78",
+            "[C 79.89 H 20.11] > [C 54.50 H 13.72 N 31.78]",
             result_data["mass-composition"],
         )
 
     def test_calculate_selected_components_mol(self):
         headers, data = self.get_headers(
             {
-                "struct": "CC.CC",
-                "input_format": "chemical/x-mdl-molfile",
-                "selected": [0, 2, 3],
+                "struct": """{"root":{"nodes":[{"$ref":"mol0"},{"$ref":"mol1"}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[5,8,0],"selected":true},{"label":"C","location":[6,8,0]}],"bonds":[{"type":1,"atoms":[0,1]}]},
+"mol1":{"type":"molecule","atoms":[{"label":"C","location":[9,8,0],"selected":true},{"label":"C","location":[10,8,0],"selected":true}],"bonds":[{"type":1,"atoms":[0,1]}]}}""",
+                "input_format": "chemical/x-indigo-ket",
                 "properties": (
                     "molecular-weight",
                     "gross",
@@ -2888,9 +2834,14 @@ M  END
     def test_calculate_selected_components_rxn(self):
         headers, data = self.get_headers(
             {
-                "struct": "CC>>CC.CC",
-                "input_format": "chemical/x-mdl-rxnfile",
-                "selected": [0, 2, 3],
+                "struct": """{"root":{"nodes":[{"$ref":"mol0"},{"$ref":"mol1"},{"$ref":"mol2"},
+{"type":"arrow","data":{"mode":"open-angle","pos":[{"x":7,"y":8,"z":0},{"x":8,"y":8,"z":0}]}},
+{"type":"plus","location":[11,8,0],"prop":{}}],"connections":[],"templates":[]},
+"mol0":{"type":"molecule","atoms":[{"label":"C","location":[5,8,0],"selected":true},{"label":"C","location":[6,8,0]}],"bonds":[{"type":1,"atoms":[0,1]}]},
+"mol1":{"type":"molecule","atoms":[{"label":"C","location":[9,8,0],"selected":true},{"label":"C","location":[10,8,0],"selected":true}],"bonds":[{"type":1,"atoms":[0,1]}]},
+"mol2":{"type":"molecule","atoms":[{"label":"C","location":[12,8,0]},{"label":"C","location":[13,8,0]}],"bonds":[{"type":1,"atoms":[0,1]}]}}""",
+                "input_format": "chemical/x-indigo-ket",
+                "selected": [],
                 "properties": (
                     "molecular-weight",
                     "gross",
@@ -2904,11 +2855,12 @@ M  END
         self.assertEqual(200, result.status_code)
         result_data = json.loads(result.text)
         self.assertEqual(
-            "16.0429997; 30.0699995", result_data["molecular-weight"]
+            "[15.0349997] > [30.0699995]", result_data["molecular-weight"]
         )
-        self.assertEqual("C H4; C2 H6", result_data["gross"])
+        self.assertEqual("[C H3] > [C2 H6]", result_data["gross"])
         self.assertEqual(
-            "C 74.87 H 25.13; C 79.89 H 20.11", result_data["mass-composition"]
+            "[C 79.89 H 20.11] > [C 79.89 H 20.11]",
+            result_data["mass-composition"],
         )
 
     def test_convert_inchi_aux(self):
@@ -2942,6 +2894,30 @@ M  END
 
         # result = requests.get(self.url_prefix + "/convert", params=params)
         # self.assertEqual("CC%91.[*]%91", result.text)
+
+    def test_convert_daylight_smiles(self):
+        """Issue #3580: daylight SMILES must not contain extended SMILES block"""
+        ket_path = os.path.join(
+            joinPathPy("structures/", __file__), "issue_3580.ket"
+        )
+        with open(ket_path, "r") as f:
+            ket_3580 = f.read()
+        params = {
+            "struct": ket_3580,
+            "output_format": "chemical/x-daylight-smiles",
+        }
+        headers, data = self.get_headers(params)
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_data = json.loads(result.text)
+        self.assertEqual(200, result.status_code)
+        self.assertEqual("chemical/x-daylight-smiles", result_data["format"])
+        self.assertNotIn(
+            "|",
+            result_data["struct"],
+            "Daylight SMILES should not contain extended SMILES block",
+        )
 
     # TODO: Add validation checks for /calculate
 
@@ -3575,6 +3551,18 @@ M  END
             {
                 "struct": peptide_fasta,
                 "options": {"monomerLibrary": monomer_library},
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+
+        result_peptide_ket_auto = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+
+        headers, data = self.get_headers(
+            {
+                "struct": peptide_fasta,
+                "options": {"monomerLibrary": monomer_library},
                 "input_format": "chemical/x-peptide-fasta",
                 "output_format": "chemical/x-fasta",
             }
@@ -3605,9 +3593,15 @@ M  END
         with open(
             os.path.join(ref_path, "peptide_fasta_ref") + ".ket", "r"
         ) as file:
-            self.assertEqual(
-                json.loads(result_peptide_ket.text)["struct"], file.read()
-            )
+            peptide_fasta_ket_ref = file.read()
+        self.assertEqual(
+            json.loads(result_peptide_ket.text)["struct"],
+            peptide_fasta_ket_ref,
+        )
+        self.assertEqual(
+            json.loads(result_peptide_ket_auto.text)["struct"],
+            peptide_fasta_ket_ref,
+        )
 
         # RNA
         with open(
@@ -3631,6 +3625,21 @@ M  END
         headers, data = self.get_headers(
             {
                 "struct": rna_fasta,
+                "options": {
+                    "sequence-type": "RNA",
+                    "monomerLibrary": monomer_library,
+                },
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+
+        result_rna_ket_auto = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+
+        headers, data = self.get_headers(
+            {
+                "struct": rna_fasta,
                 "options": {"monomerLibrary": monomer_library},
                 "input_format": "chemical/x-rna-fasta",
                 "output_format": "chemical/x-fasta",
@@ -3643,9 +3652,9 @@ M  END
 
         # write references
         # with open(
-        #    os.path.join(ref_path, "rna_fasta_ref") + ".fasta", "w"
+        #     os.path.join(ref_path, "rna_fasta_ref") + ".fasta", "w"
         # ) as file:
-        #    file.write(json.loads(result_rna_fasta.text)["struct"])
+        #     file.write(json.loads(result_rna_fasta.text)["struct"])
         # with open(
         #     os.path.join(ref_path, "rna_fasta_ref") + ".ket", "w"
         # ) as file:
@@ -3662,9 +3671,13 @@ M  END
         with open(
             os.path.join(ref_path, "rna_fasta_ref") + ".ket", "r"
         ) as file:
-            self.assertEqual(
-                json.loads(result_rna_ket.text)["struct"], file.read()
-            )
+            rna_ket_ref = file.read()
+        self.assertEqual(
+            json.loads(result_rna_ket.text)["struct"], rna_ket_ref
+        )
+        self.assertEqual(
+            json.loads(result_rna_ket_auto.text)["struct"], rna_ket_ref
+        )
 
         # DNA
         with open(
@@ -3682,6 +3695,21 @@ M  END
         )
 
         result_dna_ket = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+
+        headers, data = self.get_headers(
+            {
+                "struct": dna_fasta,
+                "options": {
+                    "sequence-type": "DNA",
+                    "monomerLibrary": monomer_library,
+                },
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+
+        result_dna_ket_auto = requests.post(
             self.url_prefix + "/convert", headers=headers, data=data
         )
 
@@ -3719,9 +3747,13 @@ M  END
         with open(
             os.path.join(ref_path, "dna_fasta_ref") + ".ket", "r"
         ) as file:
-            self.assertEqual(
-                json.loads(result_dna_ket.text)["struct"], file.read()
-            )
+            dna_ket_ref = file.read()
+        self.assertEqual(
+            json.loads(result_dna_ket.text)["struct"], dna_ket_ref
+        )
+        self.assertEqual(
+            json.loads(result_dna_ket_auto.text)["struct"], dna_ket_ref
+        )
 
     def test_convert_idt(self):
         fname = "idt_maxmgc"
@@ -3854,6 +3886,103 @@ M  END
         )
         result_helm = json.loads(result.text)["struct"]
         self.assertEqual(helm_struct, result_helm)
+
+    def test_convert_biln(self):
+        lib_file = "monomer_library.ket"
+        lib_path = os.path.join(joinPathPy("structures/", __file__), lib_file)
+        with open(lib_path, "r") as file:
+            monomer_library = file.read()
+
+        biln_struct = "A-K"
+        helm_ref = "PEPTIDE1{A.K}$$$$V2.0"
+
+        # BILN to KET
+        headers, data = self.get_headers(
+            {
+                "struct": biln_struct,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-biln",
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        self.assertEqual(200, result.status_code)
+        result_ket = json.loads(result.text)["struct"]
+
+        # KET to BILN
+        headers, data = self.get_headers(
+            {
+                "struct": result_ket,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-indigo-ket",
+                "output_format": "chemical/x-biln",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        self.assertEqual(200, result.status_code)
+        result_biln = json.loads(result.text)["struct"]
+        self.assertEqual(biln_struct, result_biln)
+
+        # KET to HELM (verify via HELM round-trip)
+        headers, data = self.get_headers(
+            {
+                "struct": result_ket,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-indigo-ket",
+                "output_format": "chemical/x-helm",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        self.assertEqual(200, result.status_code)
+        result_helm = json.loads(result.text)["struct"]
+        self.assertEqual(helm_ref, result_helm)
+
+        # BILN with terminal alias cross-link
+        biln_cross = "Ac(1,2).A-K(1,3)"
+        helm_cross_ref = (
+            "PEPTIDE1{[ac]}|PEPTIDE2{A.K}"
+            "$PEPTIDE1,PEPTIDE2,1:R2-2:R3$$$V2.0"
+        )
+        headers, data = self.get_headers(
+            {
+                "struct": biln_cross,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-biln",
+                "output_format": "chemical/x-helm",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        self.assertEqual(200, result.status_code)
+        result_helm = json.loads(result.text)["struct"]
+        self.assertEqual(helm_cross_ref, result_helm)
+
+        # BILN with cross-links
+        biln_cross = "A-C(1,3).C(1,3)"
+        helm_cross_ref = (
+            "PEPTIDE1{A.C}|PEPTIDE2{C}" "$PEPTIDE1,PEPTIDE2,2:R3-1:R3$$$V2.0"
+        )
+        headers, data = self.get_headers(
+            {
+                "struct": biln_cross,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-biln",
+                "output_format": "chemical/x-helm",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        self.assertEqual(200, result.status_code)
+        result_helm = json.loads(result.text)["struct"]
+        self.assertEqual(helm_cross_ref, result_helm)
 
     def test_macro_props(self):
         structs_path = joinPathPy("structures/", __file__)
@@ -3993,6 +4122,220 @@ M  END
         with open(file_name, "r") as file:
             ref_json = file.read()
         self.assertEqual(result_json, ref_json)
+
+    def test_expand_monomer(self):
+        lib_file = "monomer_library.ket"
+        lib_path = os.path.join(joinPathPy("structures/", __file__), lib_file)
+        with open(lib_path, "r") as file:
+            monomer_library = file.read()
+        with open(
+            os.path.join(
+                joinPathPy("structures/", __file__), "expand_no_selection.ket"
+            ),
+            "r",
+        ) as file:
+            struct = file.read()
+        headers, data = self.get_headers(
+            {
+                "struct": struct,
+                "options": {
+                    "monomerLibrary": monomer_library,
+                    "json-use-native-precision": True,
+                    "json-saving-pretty": True,
+                },
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/expand", headers=headers, data=data
+        )
+        result_json = json.loads(result.text)["struct"]
+
+        file_name = os.path.join(
+            joinPathPy("ref/", __file__), "expanded_no_selection.ket"
+        )
+        # write references
+        # with open(file_name, "w") as file:
+        #     file.write(result_json)
+        with open(file_name, "r") as file:
+            ref_json = file.read()
+
+        # check
+        self.assertEqual(result_json, ref_json)
+
+        with open(
+            os.path.join(
+                joinPathPy("structures/", __file__), "expand_selection.ket"
+            ),
+            "r",
+        ) as file:
+            struct = file.read()
+        headers, data = self.get_headers(
+            {
+                "struct": struct,
+                "options": {
+                    "monomerLibrary": monomer_library,
+                    "json-use-native-precision": True,
+                    "json-saving-pretty": True,
+                },
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/expand", headers=headers, data=data
+        )
+        result_json = json.loads(result.text)["struct"]
+
+        file_name = os.path.join(
+            joinPathPy("ref/", __file__), "expanded_selection.ket"
+        )
+        # write references
+        # with open(file_name, "w") as file:
+        #     file.write(result_json)
+        with open(file_name, "r") as file:
+            ref_json = file.read()
+
+        # check
+        self.assertEqual(result_json, ref_json)
+
+    def test_monomer_library(self):
+        with open(
+            os.path.join(
+                joinPathPy("structures/", __file__), "lib_rna_preset_g.sdf"
+            ),
+            "r",
+        ) as file:
+            struct = file.read()
+        headers, data = self.get_headers(
+            {
+                "struct": struct,
+                "options": {
+                    "json-use-native-precision": True,
+                    "json-saving-pretty": True,
+                },
+                "input_format": "chemical/x-monomer-library",
+                "output_format": "chemical/x-monomer-library",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_json = json.loads(result.text)["struct"]
+
+        file_name = os.path.join(
+            joinPathPy("ref/", __file__), "lib_rna_preset_g.ket"
+        )
+        # write references
+        # with open(file_name, "w") as file:
+        #     file.write(result_json)
+        with open(file_name, "r") as file:
+            ref_json = file.read()
+
+        # check
+        self.assertEqual(result_json, ref_json)
+
+    def test_monomer_library_ket(self):
+        with open(
+            os.path.join(
+                joinPathPy("structures/", __file__), "lib_rna_preset_g.ket"
+            ),
+            "r",
+        ) as file:
+            struct = file.read()
+        headers, data = self.get_headers(
+            {
+                "struct": struct,
+                "options": {
+                    "json-use-native-precision": True,
+                    "json-saving-pretty": True,
+                    "molfile-saving-skip-date": True,
+                    "monomer-library-saving-mode": "sdf",
+                },
+                "input_format": "chemical/x-monomer-library",
+                "output_format": "chemical/x-monomer-library",
+            }
+        )
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_sdf = json.loads(result.text)["struct"]
+
+        file_name = os.path.join(
+            joinPathPy("ref/", __file__), "lib_rna_preset_g_ref.sdf"
+        )
+        # write references
+        # with open(file_name, "w") as file:
+        #     file.write(result_sdf)
+        with open(file_name, "r") as file:
+            ref_sdf = file.read()
+
+        # check
+        self.assertEqual(result_sdf, ref_sdf)
+
+    def test_convert_axolabs(self):
+        fname = "axolabs"
+
+        lib_file = "monomer_library.ket"
+        lib_path = os.path.join(joinPathPy("structures/", __file__), lib_file)
+        with open(lib_path, "r") as file:
+            monomer_library = file.read()
+
+        axolabs_struct = "5'-dI(5MdC)AmA(NHC6)GmTm-3'"
+        # AxoLabs to ket
+        headers, data = self.get_headers(
+            {
+                "struct": axolabs_struct,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-axo-labs",
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_ket = json.loads(result.text)["struct"]
+
+        ref_prefix = os.path.join(joinPathPy("ref/", __file__), fname)
+        # write references
+        # with open(ref_prefix + ".ket", "w") as file:
+        #     file.write(result_ket)
+
+        # check
+        with open(ref_prefix + ".ket", "r") as file:
+            ref_ket = file.read()
+        self.assertEqual(result_ket, ref_ket)
+
+        # AxoLabs autodetect
+        headers, data = self.get_headers(
+            {
+                "struct": axolabs_struct,
+                "options": {"monomerLibrary": monomer_library},
+                "output_format": "chemical/x-indigo-ket",
+            }
+        )
+
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_ket = json.loads(result.text)["struct"]
+        self.assertEqual(result_ket, ref_ket)
+
+        # Ket to AxoLabs
+        headers, data = self.get_headers(
+            {
+                "struct": result_ket,
+                "options": {"monomerLibrary": monomer_library},
+                "input_format": "chemical/x-indigo-ket",
+                "output_format": "chemical/x-axo-labs",
+            }
+        )
+
+        result = requests.post(
+            self.url_prefix + "/convert", headers=headers, data=data
+        )
+        result_axolabs = json.loads(result.text)["struct"]
+        self.assertEqual(axolabs_struct, result_axolabs)
 
 
 if __name__ == "__main__":

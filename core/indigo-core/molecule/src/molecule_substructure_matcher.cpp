@@ -113,7 +113,7 @@ bool MoleculeSubstructureMatcher::_shouldUnfoldTargetHydrogens_A(QueryMolecule::
         int i;
 
         for (i = 0; i < atom->children.size(); i++)
-            if (_shouldUnfoldTargetHydrogens_A((QueryMolecule::Atom*)atom->children[i], is_fragment, find_all_embeddings))
+            if (_shouldUnfoldTargetHydrogens_A((QueryMolecule::Atom*)&atom->children[i], is_fragment, find_all_embeddings))
                 return true;
     }
 
@@ -381,8 +381,11 @@ bool MoleculeSubstructureMatcher::matchQueryAtom(QueryMolecule::Atom* query, Bas
 
     switch (query->type)
     {
+    // ATOM_STAR which came from SMILES/MOL matches any atom
+    case QueryMolecule::ATOM_STAR:
     case QueryMolecule::OP_NONE:
         return true;
+        break;
     case QueryMolecule::OP_AND:
         for (i = 0; i < query->children.size(); i++)
             if (!matchQueryAtom(query->child(i), target, super_idx, fmcache, flags))
@@ -460,7 +463,7 @@ bool MoleculeSubstructureMatcher::matchQueryAtom(QueryMolecule::Atom* query, Bas
     case QueryMolecule::ATOM_RING_BONDS_AS_DRAWN:
         return query->valueWithinRange(target.getAtomRingBondsCount(super_idx));
     case QueryMolecule::ATOM_PI_BONDED: {
-        return query->valueWithinRange(static_cast<int>(target.asMolecule().isPiBonded(super_idx)));
+        return query->valueWithinRange(static_cast<int>(target.isPiBonded(super_idx)));
     }
     case QueryMolecule::ATOM_UNSATURATION:
         return !target.isSaturatedAtom(super_idx);
@@ -477,6 +480,8 @@ bool MoleculeSubstructureMatcher::matchQueryAtom(QueryMolecule::Atom* query, Bas
         if (smarts != 0 && strlen(smarts) > 0)
         {
             fmcache->expand(super_idx + 1);
+            if (fmcache->getPtr(super_idx) == nullptr)
+                fmcache->set(super_idx, std::make_unique<RedBlackStringMap<int>>());
             int* value = fmcache->at(super_idx).at2(smarts);
 
             if (value != 0)
@@ -497,6 +502,8 @@ bool MoleculeSubstructureMatcher::matchQueryAtom(QueryMolecule::Atom* query, Bas
         if (smarts != 0 && strlen(smarts) > 0)
         {
             fmcache->expand(super_idx + 1);
+            if (fmcache->getPtr(super_idx) == nullptr)
+                fmcache->set(super_idx, std::make_unique<RedBlackStringMap<int>>());
             fmcache->at(super_idx).insert(smarts, result ? 1 : 0);
         }
 

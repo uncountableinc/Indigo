@@ -231,6 +231,14 @@ CEXPORT int indigoLoadHelm(int source, int library);
 CEXPORT int indigoLoadHelmFromString(const char* string, int library);
 CEXPORT int indigoLoadHelmFromFile(const char* filename, int library);
 
+CEXPORT int indigoLoadBiln(int source, int library);
+CEXPORT int indigoLoadBilnFromString(const char* string, int library);
+CEXPORT int indigoLoadBilnFromFile(const char* filename, int library);
+
+CEXPORT int indigoLoadAxoLabs(int source, int library);
+CEXPORT int indigoLoadAxoLabsFromString(const char* string, int library);
+CEXPORT int indigoLoadAxoLabsFromFile(const char* filename, int library);
+
 CEXPORT int indigoSaveMolfile(int molecule, int output);
 CEXPORT int indigoSaveMolfileToFile(int molecule, const char* filename);
 CEXPORT const char* indigoMolfile(int molecule);
@@ -255,8 +263,22 @@ CEXPORT int indigoSaveHelm(int molecule, int output, int library);
 CEXPORT int indigoSaveHelmToFile(int molecule, const char* filename, int library);
 CEXPORT const char* indigoHelm(int molecule, int library);
 
+CEXPORT int indigoSaveBiln(int molecule, int output, int library);
+CEXPORT int indigoSaveBilnToFile(int molecule, const char* filename, int library);
+CEXPORT const char* indigoBiln(int molecule, int library);
+
+CEXPORT int indigoSaveAxoLabs(int molecule, int output, int library);
+CEXPORT int indigoSaveAxoLabsToFile(int molecule, const char* filename, int library);
+CEXPORT const char* indigoAxoLabs(int molecule, int library);
+
+CEXPORT int indigoSaveMonomerLibrary(int output, int library);
+CEXPORT int indigoSaveMonomerLibraryToFile(const char* filename, int library);
+CEXPORT const char* indigoMonomerLibrary(int library);
+
 CEXPORT int indigoSaveJsonToFile(int item, const char* filename);
 CEXPORT int indigoSaveJson(int item, int output);
+
+CEXPORT int indigoExpandMonomers(int item);
 
 // accepts molecules and reactions (but not query ones)
 CEXPORT int indigoSaveCml(int object, int output);
@@ -589,9 +611,25 @@ CEXPORT const char* indigoGetSGroupName(int sgroup);
 CEXPORT int indigoSetSGroupClass(int sgroup, const char* sgclass);
 CEXPORT int indigoSetSGroupName(int sgroup, const char* sgname);
 CEXPORT int indigoGetSGroupNumCrossBonds(int sgroup);
+CEXPORT int indigoCreateCrossBonds(int sgroup);
+CEXPORT int indigoClearSGroupCrossBonds(int sgroup);
+
+// Issue #3604: New SGroup API methods
+CEXPORT int indigoAddSGroup(int molecule, const char* type, int extindex);
+CEXPORT int indigoSetSGroupAtoms(int sgroup, int natoms, int* atoms);
+CEXPORT int indigoSetSGroupBonds(int sgroup, int nbonds, int* bonds);
+CEXPORT int indigoIterateSGroupCrossBonds(int sgroup);
 
 CEXPORT int indigoAddSGroupAttachmentPoint(int sgroup, int aidx, int lvidx, const char* apid);
 CEXPORT int indigoDeleteSGroupAttachmentPoint(int sgroup, int index);
+// Returns iterator of superatom attachment points (SAP entries) for a superatom S-group.
+CEXPORT int indigoIterateSGroupAttachmentPoints(int sgroup);
+// Returns index of the superatom atom that owns the attachment point.
+CEXPORT int indigoGetSGroupAttachmentPointAtomIdx(int ap);
+// Returns 1 and sets *lvidx if leaving atom is specified, 0 if not specified.
+CEXPORT int indigoGetSGroupAttachmentPointLeaveAtom(int ap, int* lvidx);
+// Returns attachment point label string (e.g. "R1", "Al").
+CEXPORT const char* indigoGetSGroupAttachmentPointLabel(int ap);
 CEXPORT int indigoGetSGroupDisplayOption(int sgroup);
 CEXPORT int indigoSetSGroupDisplayOption(int sgroup, int option);
 CEXPORT int indigoGetSGroupSeqId(int sgroup);
@@ -625,6 +663,8 @@ CEXPORT const char* indigoGetTGroupAlias(int tgroup);
 
 CEXPORT int indigoTransformSCSRtoCTAB(int item);
 CEXPORT int indigoTransformCTABtoSCSR(int molecule, int templates);
+// [Sapio] FR-48004 Expose expandedMonomersToAtoms to Python API.
+CEXPORT int indigoExpandedMonomersToAtoms(int molecule);
 
 CEXPORT int indigoResetCharge(int atom);
 CEXPORT int indigoResetExplicitValence(int atom);
@@ -749,6 +789,9 @@ CEXPORT int indigoUnselect(int item);
 // Access atoms and bonds
 CEXPORT int indigoIsSelected(int item);
 
+// Molecule or reaction
+CEXPORT int indigoHasSelection(int item);
+
 /* Connected components of molecules */
 
 CEXPORT int indigoCountComponents(int molecule);
@@ -773,6 +816,7 @@ CEXPORT int indigoIterateEdgeSubmolecules(int molecule, int min_bonds, int max_b
 
 CEXPORT int indigoCountHeavyAtoms(int molecule);
 CEXPORT int indigoGrossFormula(int molecule);
+CEXPORT int indigoMolecularFormula(int molecule);
 CEXPORT double indigoMolecularWeight(int molecule);
 CEXPORT double indigoMostAbundantMass(int molecule);
 CEXPORT double indigoMonoisotopicMass(int molecule);
@@ -827,6 +871,7 @@ CEXPORT int indigoUnfoldHydrogens(int item);
 CEXPORT int indigoFoldUnfoldHydrogens(int item);
 
 CEXPORT int indigoLayout(int object);
+CEXPORT int indigoLayoutSelected(int object);
 CEXPORT int indigoClean2d(int object);
 
 CEXPORT const char* indigoSmiles(int item);
@@ -1109,6 +1154,13 @@ CEXPORT int indigoRGroupComposition(int molecule, const char* options);
  * Abbreviations
  */
 CEXPORT int indigoExpandAbbreviations(int molecule);
+
+/*
+ * Group pseudoatoms (OH, NH2, etc.): expand to explicit atoms for V3000/molfile
+ * interoperability. Call after expandedMonomersToAtoms(). See
+ * indigo_group_pseudoatoms_expand.h for the list of labels.
+ */
+CEXPORT int indigoExpandGroupPseudoatoms(int molecule);
 
 /* Other */
 

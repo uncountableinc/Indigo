@@ -19,8 +19,6 @@
 #include "reaction/base_reaction.h"
 #include "base_cpp/output.h"
 #include "base_cpp/tlscont.h"
-#include "molecule/ket_document.h"
-#include "molecule/ket_document_json_loader.h"
 #include "molecule/meta_commons.h"
 #include "molecule/molecule_dearom.h"
 #include "reaction/pathway_reaction.h"
@@ -99,7 +97,7 @@ SideIter SideAuto::end()
 
 BaseReaction::BaseReaction()
     : reactants(*this, REACTANT), catalysts(*this, CATALYST), products(*this, PRODUCT), intermediates(*this, INTERMEDIATE), undefined(*this, UNDEFINED),
-      original_format(BaseMolecule::UNKNOWN), _document(nullptr)
+      original_format(BaseMolecule::UNKNOWN)
 {
     clear();
 }
@@ -117,13 +115,10 @@ void BaseReaction::clear()
     _undefinedCount = 0;
     _specialCount = 0;
     _allMolecules.clear();
+    _reactionBlocks.clear();
+    _specialConditions.clear();
     _types.clear();
     name.clear();
-    if (_document != nullptr)
-    {
-        delete _document;
-        _document = nullptr;
-    }
 }
 
 int BaseReaction::getAAM(int index, int atom)
@@ -258,6 +253,14 @@ bool BaseReaction::haveCoord(BaseReaction& reaction)
     return true;
 }
 
+bool BaseReaction::hasSelection()
+{
+    for (int i = begin(); i < end(); i = next(i))
+        if (getBaseMolecule(i).hasSelection())
+            return true;
+    return false;
+}
+
 int BaseReaction::_nextElement(int type, int index)
 {
     if (index == -1)
@@ -282,6 +285,11 @@ void BaseReaction::clearAAM()
     }
 }
 
+int BaseReaction::specialConditionCount()
+{
+    return _specialConditions.size();
+}
+
 int BaseReaction::addSpecialCondition(int meta_idx, const Rect2f& bbox)
 {
     _specialConditions.push(SpecialCondition(meta_idx, bbox));
@@ -293,9 +301,9 @@ void BaseReaction::clearSpecialConditions()
     _specialConditions.clear();
 }
 
-const SpecialCondition& BaseReaction::specialCondition(int meta_idx) const
+const SpecialCondition& BaseReaction::specialCondition(int idx) const
 {
-    return _specialConditions[meta_idx];
+    return _specialConditions[idx];
 }
 
 int BaseReaction::addReactantCopy(BaseMolecule& mol, Array<int>* mapping, Array<int>* inv_mapping)
@@ -343,12 +351,12 @@ int BaseReaction::addUndefinedCopy(BaseMolecule& mol, Array<int>* mapping, Array
     return idx;
 }
 
-void BaseReaction::clone(BaseReaction& other, Array<int>* mol_mapping, ObjArray<Array<int>>* mappings, ObjArray<Array<int>>* inv_mappings)
+void BaseReaction::clone(BaseReaction& other, Array<int>* mol_mapping, PtrArray<Array<int>>* mappings, PtrArray<Array<int>>* inv_mappings)
 {
     clear();
 
     int i, index = 0;
-    QS_DEF(ObjArray<Array<int>>, tmp_mappings);
+    QS_DEF(PtrArray<Array<int>>, tmp_mappings);
 
     if (mol_mapping != 0)
     {
@@ -391,7 +399,8 @@ void BaseReaction::clone(BaseReaction& other, Array<int>* mol_mapping, ObjArray<
 
         if (inv_mappings != 0)
         {
-            inv_mappings->expand(index + 1);
+            while (inv_mappings->size() <= index)
+                inv_mappings->add(std::make_unique<Array<int>>());
             inv_mappings->at(index).copy(inv_mapping);
         }
         if (mol_mapping != 0)
@@ -408,7 +417,7 @@ void BaseReaction::clone(BaseReaction& other, Array<int>* mol_mapping, ObjArray<
     _cloneSub(other);
 }
 
-void BaseReaction::_clone(BaseReaction& other, int index, int i, ObjArray<Array<int>>* mol_mappings)
+void BaseReaction::_clone(BaseReaction& other, int index, int i, PtrArray<Array<int>>* mol_mappings)
 {
 }
 
@@ -534,23 +543,4 @@ PropertiesMap& BaseReaction::properties()
 int BaseReaction::multitaleCount() const
 {
     return _meta.getMetaCount(ReactionMultitailArrowObject::CID);
-}
-
-KetDocument& BaseReaction::getKetDocument()
-{
-    if (_document == nullptr)
-    {
-        // save to ket
-        std::string json;
-        StringOutput out(json);
-        ReactionJsonSaver saver(out);
-        saver.saveReaction(*this);
-        // load document from ket
-        rapidjson::Document data;
-        std::ignore = data.Parse(json.c_str());
-        _document = new KetDocument;
-        KetDocumentJsonLoader loader{};
-        loader.parseJson(json, *_document);
-    }
-    return *_document;
 }

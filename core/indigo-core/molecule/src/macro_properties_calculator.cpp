@@ -19,6 +19,7 @@
 #include "molecule/macro_properties_calculator.h"
 #include "molecule/crippen.h"
 #include "molecule/json_writer.h"
+
 #include "molecule/molecule.h"
 #include "molecule/molecule_gross_formula.h"
 #include "molecule/molecule_json_loader.h"
@@ -116,7 +117,7 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
         for (auto& monomer : sequences[i])
         {
             auto& mon = monomers.at(monomer);
-            if (mon->hasBoolProp("selected") && mon->getBoolProp("selected"))
+            if (mon->selected())
             {
                 has_selection = true;
                 polymers.back().has_selection = true;
@@ -140,14 +141,29 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
         else
             atom_connections[atom_idx] += 1;
     };
+    auto merge_polymer = [&](size_t dest_polymer, size_t source_polymer) {
+        polymers[dest_polymer].merge(polymers[source_polymer]);
+        polymers[dest_polymer].has_selection |= polymers[source_polymer].has_selection;
+        for (auto& it : sequence_to_polymer_idx)
+        {
+            if (it.second == source_polymer)
+                it.second = dest_polymer;
+        }
+        for (auto& it : molecule_to_polymer_idx)
+        {
+            if (it.second == source_polymer)
+                it.second = dest_polymer;
+        }
+        polymers[source_polymer].deleted = true;
+    };
     for (auto connection : document.nonSequenceConnections())
     {
         auto& ep1 = connection.ep1();
         auto& ep2 = connection.ep2();
-        if (ep1.hasStringProp("monomerId") && ep2.hasStringProp("monomerId"))
+        if (hasKetStrProp(ep1, monomerId) && hasKetStrProp(ep2, monomerId))
         {
-            auto& left_monomer_id = document.monomerIdByRef(ep1.getStringProp("monomerId"));
-            auto& right_monomer_id = document.monomerIdByRef(ep2.getStringProp("monomerId"));
+            auto& left_monomer_id = document.monomerIdByRef(getKetStrProp(ep1, monomerId));
+            auto& right_monomer_id = document.monomerIdByRef(getKetStrProp(ep2, monomerId));
             auto& left_monomer = monomers.at(left_monomer_id);
             auto& right_monomer = monomers.at(right_monomer_id);
 
@@ -158,8 +174,8 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
             }
             else if (connection.connectionType() == KetConnectionSingle)
             {
-                auto& ap_left = ep1.getStringProp("attachmentPointId");
-                auto& ap_right = ep2.getStringProp("attachmentPointId");
+                auto& ap_left = getKetStrProp(ep1, attachmentPointId);
+                auto& ap_right = getKetStrProp(ep2, attachmentPointId);
                 left_monomer->connectAttachmentPointTo(ap_left, right_monomer->ref(), ap_right);
                 right_monomer->connectAttachmentPointTo(ap_right, left_monomer->ref(), ap_left);
             }
@@ -168,50 +184,34 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
             size_t left_polymer_idx = sequence_to_polymer_idx[left_sequence_idx];
             size_t right_polymer_idx = sequence_to_polymer_idx[right_sequence_idx];
             if (left_sequence_idx != right_sequence_idx && left_polymer_idx != right_polymer_idx)
-            {
-                polymers[left_polymer_idx].merge(polymers[right_polymer_idx]);
-                polymers[left_polymer_idx].has_selection |= polymers[right_polymer_idx].has_selection;
-                sequence_to_polymer_idx[right_sequence_idx] = left_polymer_idx;
-                polymers[right_polymer_idx].deleted = true;
-            }
+                merge_polymer(left_polymer_idx, right_polymer_idx);
             if (connection.connectionType() != KetConnectionHydro)
                 polymers[left_polymer_idx].has_non_sequence_connection = true;
         }
-        else if ((ep1.hasStringProp("monomerId") && ep2.hasStringProp("moleculeId")) || (ep1.hasStringProp("moleculeId") && ep2.hasStringProp("monomerId")))
+        else if ((hasKetStrProp(ep1, monomerId) && hasKetStrProp(ep2, moleculeId)) || (hasKetStrProp(ep1, moleculeId) && hasKetStrProp(ep2, monomerId)))
         {
-            auto monomer_id = ep1.hasStringProp("monomerId") ? document.monomerIdByRef(ep1.getStringProp("monomerId"))
-                                                             : document.monomerIdByRef(ep2.getStringProp("monomerId"));
-            auto molecule_id = ep1.hasStringProp("moleculeId") ? ep1.getStringProp("moleculeId") : ep2.getStringProp("moleculeId");
-            int atom_idx = std::stoi(ep1.hasStringProp("moleculeId") ? ep1.getStringProp("atomId") : ep2.getStringProp("atomId"));
-            auto monomer_ap = ep1.hasStringProp("monomerId") ? ep1.getStringProp("attachmentPointId") : ep2.getStringProp("attachmentPointId");
+            auto monomer_id =
+                hasKetStrProp(ep1, monomerId) ? document.monomerIdByRef(getKetStrProp(ep1, monomerId)) : document.monomerIdByRef(getKetStrProp(ep2, monomerId));
+            auto molecule_id = hasKetStrProp(ep1, moleculeId) ? getKetStrProp(ep1, moleculeId) : getKetStrProp(ep2, moleculeId);
+            int atom_idx = std::stoi(hasKetStrProp(ep1, moleculeId) ? getKetStrProp(ep1, atomId) : getKetStrProp(ep2, atomId));
+            auto monomer_ap = hasKetStrProp(ep1, monomerId) ? getKetStrProp(ep1, attachmentPointId) : getKetStrProp(ep2, attachmentPointId);
             monomers.at(monomer_id)->connectAttachmentPointToMolecule(monomer_ap, molecule_id, atom_idx);
             size_t sequence_polymer_idx = sequence_to_polymer_idx[monomer_to_sequence_idx[monomer_id]];
-
             size_t molecule_polymer_idx = molecule_to_polymer_idx[molecule_id];
             if (sequence_polymer_idx != molecule_polymer_idx)
-            {
-                polymers[sequence_polymer_idx].merge(polymers[molecule_polymer_idx]);
-                polymers[sequence_polymer_idx].has_selection |= polymers[molecule_polymer_idx].has_selection;
-                molecule_to_polymer_idx[molecule_id] = sequence_polymer_idx;
-                polymers[molecule_polymer_idx].deleted = true;
-            }
+                merge_polymer(sequence_polymer_idx, molecule_polymer_idx);
             add_connection_to_atom(sequence_polymer_idx, molecule_id, atom_idx);
         }
-        else if (ep1.hasStringProp("moleculeId") && ep2.hasStringProp("moleculeId"))
+        else if (hasKetStrProp(ep1, moleculeId) && hasKetStrProp(ep2, moleculeId))
         {
-            auto first_molecule_id = ep1.getStringProp("moleculeId");
-            auto second_molecule_id = ep2.getStringProp("moleculeId");
-            int first_atom_idx = std::stoi(ep1.getStringProp("atomId"));
-            int second_atom_idx = std::stoi(ep2.getStringProp("atomId"));
+            auto first_molecule_id = getKetStrProp(ep1, moleculeId);
+            auto second_molecule_id = getKetStrProp(ep2, moleculeId);
+            int first_atom_idx = std::stoi(getKetStrProp(ep1, atomId));
+            int second_atom_idx = std::stoi(getKetStrProp(ep2, atomId));
             size_t first_molecule_polymer_idx = molecule_to_polymer_idx[first_molecule_id];
             size_t second_molecule_polymer_idx = molecule_to_polymer_idx[second_molecule_id];
             if (first_molecule_polymer_idx != second_molecule_polymer_idx)
-            {
-                polymers[first_molecule_polymer_idx].merge(polymers[second_molecule_polymer_idx]);
-                polymers[first_molecule_polymer_idx].has_selection |= polymers[second_molecule_polymer_idx].has_selection;
-                molecule_to_polymer_idx[second_molecule_id] = first_molecule_polymer_idx;
-                polymers[second_molecule_polymer_idx].deleted = true;
-            }
+                merge_polymer(first_molecule_polymer_idx, second_molecule_polymer_idx);
             add_connection_to_atom(first_molecule_polymer_idx, first_molecule_id, first_atom_idx);
             add_connection_to_atom(first_molecule_polymer_idx, second_molecule_id, second_atom_idx);
         }
@@ -353,12 +353,11 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                 break;
             if (second_monomer->hydrogenConnections().count(first_monomer->ref()) == 0)
                 break;
-            if (possible_bases.count(templates.at(first_monomer->templateId()).getStringProp("naturalAnalogShort")) == 0)
+            if (possible_bases.count(getKetStrProp(templates.at(first_monomer->templateId()), naturalAnalogShort)) == 0)
                 break;
-            if (possible_bases.count(templates.at(second_monomer->templateId()).getStringProp("naturalAnalogShort")) == 0)
+            if (possible_bases.count(getKetStrProp(templates.at(second_monomer->templateId()), naturalAnalogShort)) == 0)
                 break;
-            if (has_selection && !(first_monomer->hasBoolProp("selected") && first_monomer->getBoolProp("selected") &&
-                                   second_monomer->hasBoolProp("selected") && second_monomer->getBoolProp("selected")))
+            if (has_selection && !(first_monomer->selected()) && second_monomer->selected())
                 break;
             first_nucleos_it++;
             second_nucleos_it++;
@@ -370,7 +369,8 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
     }
     // Sequences generated. Calculate macro properties
     rapidjson::StringBuffer s;
-    JsonWriter writer(pretty_json);
+    auto writer_ptr = JsonWriter::createJsonWriter(pretty_json);
+    JsonWriter& writer = *writer_ptr;
     writer.Reset(s);
     writer.SetMaxDecimalPlaces(6);
     writer.StartArray();
@@ -386,9 +386,8 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
         // in kDa(1000g/mol) (all chains)
         double mass_sum = 0;
         bool calculate_mass = true;
-        std::map<char, size_t> atoms_count;
         GROSS_UNITS gross_units;
-        gross_units.resize(1);
+        gross_units.add(std::make_unique<GrossFormulaUnit>());
         auto merge_gross_data = [&gross_units](const GROSS_UNITS& gross) {
             for (int i = 0; i < gross.size(); i++)
             {
@@ -403,37 +402,59 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
         };
         for (size_t sequence_idx : polymer.sequences)
         {
-            if (!calculate_mass)
-                break;
             for (auto& monomer_id : sequences[sequence_idx])
             {
                 auto& monomer = monomers.at(monomer_id);
-                bool selected = monomer->hasBoolProp("selected") && monomer->getBoolProp("selected");
+                bool selected = monomer->selected();
                 if (has_selection && !selected)
                     continue;
                 if (monomer->monomerType() == KetBaseMonomer::MonomerType::AmbiguousMonomer)
                 {
                     calculate_mass = false;
-                    atoms_count.clear();
-                    break;
+                    continue;
                 }
                 auto& monomer_template = templates.at(monomer->templateId());
                 if (monomer_template.unresolved())
                 {
                     calculate_mass = false;
-                    atoms_count.clear();
-                    break;
+                    continue;
                 }
                 std::vector<int> leaved_atoms;
                 auto& att_points = monomer->attachmentPoints();
-                std::vector<std::string> used_attachment_points;
+                std::set<std::string> used_attachment_points;
+
                 for (auto& conn : monomer->connections())
-                {
-                    used_attachment_points.emplace_back(conn.first);
-                }
+                    used_attachment_points.emplace(conn.first);
+
                 for (auto& conn : monomer->connectionsToMolecules())
+                    used_attachment_points.emplace(conn.first);
+
+                if (document.getMonomerClass(*monomer) == MonomerClass::AminoAcid)
                 {
-                    used_attachment_points.emplace_back(conn.first);
+                    static const std::unordered_map<std::string, std::array<double, 3>> pKa_table = {
+                        {"A", {2.35, 9.87, 0}},    {"R", {2.01, 9.04, 12.48}}, {"N", {2.02, 8.80, 0}}, {"D", {2.10, 9.82, 3.86}},  {"C", {2.05, 10.25, 8.00}},
+                        {"E", {2.10, 9.47, 4.07}}, {"Q", {2.17, 9.13, 0}},     {"G", {2.35, 9.78, 0}}, {"H", {1.77, 9.18, 6.10}},  {"I", {2.32, 9.76, 0}},
+                        {"L", {2.33, 9.74, 0}},    {"K", {2.18, 8.95, 10.53}}, {"M", {2.28, 9.21, 0}}, {"F", {2.58, 9.24, 0}},     {"P", {2.00, 10.60, 0}},
+                        {"S", {2.21, 9.15, 0}},    {"T", {2.09, 9.10, 0}},     {"W", {2.38, 9.39, 0}}, {"Y", {2.20, 9.11, 10.07}}, {"V", {2.29, 9.72, 0}},
+                    };
+                    if (hasKetStrProp(monomer_template, naturalAnalogShort))
+                    {
+                        auto& natural_analog = getKetStrProp(monomer_template, naturalAnalogShort);
+                        const auto& pka_values = pKa_table.find(natural_analog);
+                        if (pka_values != pKa_table.end())
+                        {
+
+                            for (const auto& ap : att_points)
+                            {
+                                if (used_attachment_points.count(ap.first) == 0)
+                                {
+                                    double pka = pka_values->second[getAttachmentOrder(ap.first)];
+                                    if (pka > 0)
+                                        pKa_values.emplace_back(pka);
+                                }
+                            }
+                        }
+                    }
                 }
                 for (auto& att_point_id : used_attachment_points)
                 {
@@ -446,10 +467,11 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                     auto& leaved = leaving_group.value();
                     leaved_atoms.insert(leaved_atoms.end(), leaved.begin(), leaved.end());
                 }
+
                 std::sort(leaved_atoms.rbegin(), leaved_atoms.rend());
-                auto tgroup = monomer_template.getTGroup();
-                auto* pmol = static_cast<Molecule*>(tgroup->fragment.get());
                 Array<int> atom_filt;
+                auto tgroup = monomer_template.getTGroup();
+                auto* pmol = tgroup->fragment.get();
                 atom_filt.expandFill(pmol->vertexCount(), 1);
                 for (auto& idx : leaved_atoms)
                     atom_filt[idx] = 0;
@@ -458,10 +480,6 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                 MoleculeMass mass;
                 mass.mass_options.skip_error_on_pseudoatoms = true;
                 mass_sum += mass.molecularWeight(*pmol);
-                if (document.getMonomerClass(*monomer) == MonomerClass::AminoAcid)
-                {
-                    pKa_values.emplace_back(Crippen::pKa(*pmol));
-                }
                 auto gross = MoleculeGrossFormula::collect(*pmol, true);
                 merge_gross_data(*gross);
             }
@@ -567,15 +585,15 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
             while (it != sequence.end())
             {
                 auto& monomer = monomers.at(*it);
-                bool selected = monomer->hasBoolProp("selected") && monomer->getBoolProp("selected");
+                bool selected = monomer->selected();
                 if (has_selection && !selected)
                     continue;
                 if (monomer->monomerType() == KetBaseMonomer::MonomerType::AmbiguousMonomer)
                     continue;
                 auto& monomer_template = templates.at(monomer->templateId());
-                if (!monomer_template.hasStringProp("naturalAnalogShort"))
+                if (!hasKetStrProp(monomer_template, naturalAnalogShort))
                     throw Error("Monomer template without natural analog short: %s", monomer_template.id().c_str());
-                bases.emplace_back(monomer_template.getStringProp("naturalAnalogShort"));
+                bases.emplace_back(getKetStrProp(monomer_template, naturalAnalogShort));
                 move_to_next_base(it, sequence.end());
             }
             if (bases.size() > 1 && std::isfinite(upc) && std::isfinite(nac) && upc > 0 && nac > 0)
@@ -622,7 +640,7 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                 for (auto& monomer_id : sequences[sequence_idx])
                 {
                     auto& monomer = monomers.at(monomer_id);
-                    bool selected = monomer->hasBoolProp("selected") && monomer->getBoolProp("selected");
+                    bool selected = monomer->selected();
                     if (has_selection && !selected)
                         continue;
                     if (document.getMonomerClass(*monomer) != MonomerClass::AminoAcid)
@@ -631,9 +649,9 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                     if (monomer->monomerType() == KetBaseMonomer::MonomerType::AmbiguousMonomer)
                         continue;
                     auto& monomer_template = templates.at(monomer->templateId());
-                    if (monomer_template.hasStringProp("naturalAnalogShort"))
+                    if (hasKetStrProp(monomer_template, naturalAnalogShort))
                     {
-                        auto it = extinction_counts.find(monomer_template.getStringProp("naturalAnalogShort"));
+                        auto it = extinction_counts.find(getKetStrProp(monomer_template, naturalAnalogShort));
                         if (it != extinction_counts.end())
                         {
                             it->second++;
@@ -665,16 +683,16 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                 if (document.getMonomerClass(monomer_id) != MonomerClass::AminoAcid)
                     continue;
                 auto& monomer = monomers.at(monomer_id);
-                bool selected = monomer->hasBoolProp("selected") && monomer->getBoolProp("selected");
+                bool selected = monomer->selected();
                 if (has_selection && !selected)
                     continue;
 
                 if (monomer->monomerType() == KetBaseMonomer::MonomerType::AmbiguousMonomer)
                     continue;
                 auto& monomer_template = templates.at(monomer->templateId());
-                if (monomer_template.hasStringProp("naturalAnalogShort"))
+                if (hasKetStrProp(monomer_template, naturalAnalogShort))
                 {
-                    auto it = hydrophobicity_coefficients.find(monomer_template.getStringProp("naturalAnalogShort"));
+                    auto it = hydrophobicity_coefficients.find(getKetStrProp(monomer_template, naturalAnalogShort));
                     if (it != hydrophobicity_coefficients.end())
                         hydrophobicity.emplace_back(it->second);
                 }
@@ -690,7 +708,7 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
         }
 
         // Monomer count
-        static const std::string peptides = "ACDEFGHIKLMNPQRSTVWY";
+        static const std::string peptides = "ACDEFGHIKLMNOPQRSTUVWY";
         static const std::string nucleotides = "ACGTU";
         std::map<std::string, size_t> peptides_count;
         std::map<std::string, size_t> nucleotides_count;
@@ -706,7 +724,7 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
             for (auto& monomer_id : sequences[sequence_idx])
             {
                 auto& monomer = monomers.at(monomer_id);
-                bool selected = monomer->hasBoolProp("selected") && monomer->getBoolProp("selected");
+                bool selected = monomer->selected();
                 if (has_selection && !selected)
                     continue;
 
@@ -724,8 +742,8 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                 auto& monomer_template = templates.at(monomer->templateId());
                 if (monomer_template.monomerClass() == MonomerClass::AminoAcid)
                 {
-                    if (monomer_template.hasStringProp("naturalAnalogShort"))
-                        natural_analog = monomer_template.getStringProp("naturalAnalogShort");
+                    if (hasKetStrProp(monomer_template, naturalAnalogShort))
+                        natural_analog = getKetStrProp(monomer_template, naturalAnalogShort);
                     auto it = peptides_count.find(natural_analog);
                     if (it == peptides_count.end())
                         peptides_count[OTHER]++;
@@ -748,11 +766,11 @@ void MacroPropertiesCalculator::CalculateMacroProps(KetDocument& document, Outpu
                         if (document.getMonomerClass(*sugar) != MonomerClass::Sugar)
                             continue;
                         // if base is selected and sugar is not selected - skip
-                        if (has_selection && !(sugar->hasBoolProp("selected") && sugar->getBoolProp("selected")))
+                        if (has_selection && !(sugar->selected()))
                             continue;
                     }
-                    if (monomer_template.hasStringProp("naturalAnalogShort"))
-                        natural_analog = monomer_template.getStringProp("naturalAnalogShort");
+                    if (hasKetStrProp(monomer_template, naturalAnalogShort))
+                        natural_analog = getKetStrProp(monomer_template, naturalAnalogShort);
                     auto it = nucleotides_count.find(natural_analog);
                     if (it == nucleotides_count.end())
                         nucleotides_count[OTHER]++;
