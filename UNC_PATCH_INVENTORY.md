@@ -62,13 +62,40 @@ merged file rather than by running the suite.
 Before a bump, consider landing a characterisation test for each against the current fork, so the
 merge has something to fail against.
 
-## Check for supersession first
+## Supersession, as measured against 1.46
 
-Upstream 1.46 declares `SG_TYPE_MON`, `SG_TYPE_COP`, `SG_TYPE_COM` and `SG_TYPE_MIX` natively. If
-its behaviour matches ours, the COP and COM/MON/MIX patches drop and take 7 colliding files with
-them — the single largest reduction available. Verify behaviourally, not by the enum alone.
+Upstream 1.46 declares `SG_TYPE_MON`, `SG_TYPE_COP`, `SG_TYPE_COM` and `SG_TYPE_MIX` in the enum,
+which reads like it implements all four. It does not. Checked per patch:
 
-Upstream 1.46 has no axial or allene CIP code at all, so MAT-75503 and MAT-75502 stay ours.
+**COP copolymer is superseded. Drop it.** Upstream carries `CopolymerGroup`, the KET loader case
+and the saver path, and its loader case is byte-for-byte identical to ours — same `subtype`
+handling for RAN/ALT/BLO, same `connectivity` for HT/HH/EU. Upstream arrived at our implementation
+independently.
+
+**COM/MON/MIX is not superseded.** There is no `MonomerGroup`, `ComponentGroup` or `MixtureGroup`
+class, the KET loader has no case for any of them, and the saver refuses them outright:
+
+```cpp
+case SGroup::SG_TYPE_MON: throw Error("SG_TYPE_MON not implemented in indigo yet");
+case SGroup::SG_TYPE_COM: throw Error("SG_TYPE_COM not implemented in indigo yet");
+case SGroup::SG_TYPE_MIX: throw Error("SG_TYPE_MIX not implemented in indigo yet");
+```
+
+The enum values are placeholders. This fork implements what upstream marks unimplemented, so a
+structure carrying a formulation S-group throws on a stock Indigo rather than degrading. That
+dependency is invisible from the enum, which is why this has to be checked behaviourally.
+
+Dropping COP frees little in file terms: it shares six files with COM/MON/MIX
+(`molecule_sgroups.{h,cpp}`, `molecule_json_{loader,saver}.cpp`, `molfile_{loader,saver}.cpp`),
+which stay contended for COM/MON/MIX regardless. The gain is less logic to reapply inside each
+file, not fewer files to resolve.
+
+**CIP stays ours.** Upstream 1.46 has no axial or allene CIP code at all — zero references against
+19 in this fork — so MAT-75503 and MAT-75502 both remain.
+
+Both surviving patches have a matching half in the ketcher fork, for the same reason: upstream
+ketcher's KET schema rejects `MON`/`MIX`/`COM` and the `M`/`P` CIP descriptors because upstream
+Indigo does not produce them. Bumping Indigo does not retire either ketcher patch.
 
 ## Known traps
 
