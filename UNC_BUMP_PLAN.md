@@ -39,14 +39,32 @@ preserved.
 
 COP is the exception — it is being dropped, so it needs no test.
 
-## Phase 1 — drop COP
+## Phase 1 — drop the COP logic upstream supersedes — **done**
 
-Upstream 1.46 implements copolymer S-groups identically. Remove this fork's COP logic from
-`molecule_sgroups.{h,cpp}`, `molecule_json_{loader,saver}.cpp` and `molfile_{loader,saver}.cpp`,
-keeping the COM/MON/MIX logic in the same files, and take upstream's.
+Upstream 1.46 implements copolymer S-groups identically at five sites, not all eight. Measured
+rather than assumed, which changed this phase's scope:
 
-Do this as its own commit before the merge, so the merge diff is not carrying code that is about to
-be deleted.
+Dropped, reverted to the `indigo-1.34.0` state so the merge takes upstream's version with no
+conflict:
+
+- the KET loader case in `molecule_json_loader.cpp`
+- the KET saver case in `molecule_json_saver.cpp`
+- the v3000 molfile writer in `molfile_saver.cpp`
+
+Kept, because upstream has no equivalent — see the inventory for what each one does:
+
+- the `SST` reader in `molfile_loader.cpp`
+- the v2000 `M  SCN` writer in `molfile_saver.cpp`
+- the COP arm of `_updateRepeatingUnits` in `molecule_layout.cpp`
+
+`CopolymerGroup` and its `addSGroup` case stay too, although upstream carries both, because the
+kept `M  SCN` writer depends on the class. The merge conflicts trivially there; take upstream's.
+
+Between this phase and the merge, COP cannot be loaded from or written to KET. Nothing ships
+without a tag, so land the merge before releasing.
+
+The pre-bump markers the Rollback section calls for exist: tag `master-pre-1.46-bump` and branch
+`master-backup-pre-1.46-bump`.
 
 ## Phase 2 — merge
 
