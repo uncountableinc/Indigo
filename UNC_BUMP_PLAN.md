@@ -69,27 +69,44 @@ without a tag, so land the merge before releasing.
 The pre-bump markers the Rollback section calls for exist: tag `master-pre-1.46-bump` and branch
 `master-backup-pre-1.46-bump`.
 
-## Phase 2 — merge
+## Phase 2 — merge — **done**
 
-One step to 1.46. Stepping through twelve minors does not help here: the cost is upstream's large
-refactors, which would be re-resolved at every stop.
+One step to 1.46: 1180 files from upstream, 54 conflicts.
 
-Resolve each conflicted file back to the patch that owns it, never to a side:
+Two upstream refactors decided most of the work, and neither was visible from the inventory's
+file list:
 
-```
-git diff indigo-1.34.0 master -- <file>
-```
+- `molfile_loader.cpp` was split into `molfile_loader.cpp`, `molfile_loader_v2000.cpp` and
+  `molfile_loader_v3000.cpp`. Its 82 patched lines are now either superseded or relocated, and the
+  file carries no fork delta at all.
+- The S-group subscript moved off each subclass onto `SGroup::label`. Upstream now reads and writes
+  it generically, for KET, v2000 `SMT` and v3000 `LABEL`.
 
-Take upstream's version of the file and reapply that delta by hand.
+What that meant per patch:
 
-Four files are owned by more than one patch — `molecule_sgroups.cpp`, `molfile_saver.cpp`,
-`molecule_cip_calculator.cpp` (three patches), `molecule_cdxml_loader.cpp` (three patches). Check
-each against every patch the inventory lists for it. Resolving for one and moving on is how another
-gets dropped with nothing to catch it.
+| Patch | Outcome |
+| --- | --- |
+| COP `SST` reader | superseded by `molfile_loader_v2000.cpp` |
+| COM/MIX `SMT` and `LABEL` readers | superseded by upstream's generic `label` handling |
+| COM/MIX v2000 `SMT` writers | superseded — upstream writes `SMT` for every labelled S-group |
+| COM/MIX `subscript` field | dropped; both now use `SGroup::label` |
+| `M  SNC` reader | relocated to `molfile_loader_v2000.cpp` |
+| `COMPNO` reader | relocated to `molfile_loader_v3000.cpp` |
+| COP `M  SCN` writer | rewritten against upstream's `SGroupInfo` indexing |
+| everything else | reapplied unchanged |
 
-Two files need relocation rather than reapplication: upstream removed 4225 lines from
-`base_molecule.cpp` and 3804 from `molfile_loader.cpp`, moving the code elsewhere. Find where it
-went and put the patch there. Reapplying in place duplicates logic upstream moved.
+The COP `M  SCN` writer now casts to `CopolymerGroup` rather than `RepeatingUnit`, so the layout
+coincidence the inventory warned about no longer matters.
+
+`.github/workflows/indigo-ci.yaml` is upstream's, with four fork changes re-applied: the
+`create_github_release` job, `windows-latest` dropped from the x86_64 lib matrix, macOS built on
+every run rather than only on a tag, and `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` on all 21 cmake
+invocations. Versions are `1.46.0+unc35`, and `api/python/setup.py` keeps the `epam.indigo`
+distribution name.
+
+Verified so far: all 396 non-third-party translation units pass `clang -fsyntax-only` with the
+project's own flags, and every inventoried patch still has a delta against upstream except those
+marked superseded above.
 
 ## Phase 3 — validate
 
@@ -101,6 +118,19 @@ In order, cheapest first:
 3. The characterisation tests from Phase 0. These are the ones that speak for the untested patches.
 4. Read the merged result of the four multi-patch files against the inventory, by eye. For the
    patches with no test, this is the only check there is.
+
+**Nine golden files were resolved to upstream and are known to need regeneration.** They are
+expected outputs compared against this fork's savers, whose bracket formatting (`%.8g`) and line
+wrapping differ from upstream's:
+
+- `data/molecules/basic/peptide_expanded.mol`
+- `api/tests/integration/ref/basic/{basic_load,sgroups_basic}.py.out`
+- `api/tests/integration/ref/formats/{cdx_export,ket_to_mol,mol_features,serialize_deserialize_attachment_points_in_ket}.py.out`
+- `api/tests/integration/ref/rendering/{cdxml,sgroups_instrumentation}.py.out`
+
+Regenerate them from a library built by CI, not by hand: download the `indigo-python` wheel from
+this branch's CI run, install it, and re-run each test. Hand-editing a molfile golden to match the
+fork's formatting is how a real behaviour change gets absorbed unnoticed.
 
 **Golden files will mismatch, and regenerating them is a decision.** The bracket-export patch emits
 Superatom bracket coordinates as `%.8g` where upstream uses `%f`, so this fork writes
