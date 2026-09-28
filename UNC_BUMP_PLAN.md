@@ -90,18 +90,63 @@ as it can absorb a formatting one. This exact mismatch broke the previous bump.
 
 ## Phase 4 — release
 
-`.github/workflows/indigo-ci.yaml` is itself contended: upstream changed it and so did this fork.
-Resolve it deliberately, because it is what publishes the artifacts.
+### How a release happens
 
-Tag as the next `unc` release and confirm **all four artifacts** exist before believing the bump
-landed:
+A release is a tag matching `indigo-*` pushed to this fork. CI also runs on master pushes and pull
+requests, but every publishing step is gated on `startsWith(github.ref, 'refs/tags/indigo-')`.
 
-- the `indigo-service` image
-- `epam.indigo` wheels for darwin arm64, linux x86_64, linux aarch64
+Set the version in `api/indigo-version.cmake` first — `set(INDIGO_DEFAULT_VERSION "1.34.0+unc34")`
+becomes `1.46.0+unc35`. cmake also runs `git describe --long --tags --match indigo-*`, which is why
+the jobs re-fetch tags. That file is in the collision set, so upstream will conflict there too.
 
-The previous bump failed `build_indigo_libs_x86_64`, which skipped every downstream wheel job. No
-wheel published, consumers silently stayed on the prior version, and the bump looked merged. Check
-the release assets, not the merge status.
+Tag `indigo-1.46.0-unc35` yields `1.46.0-unc35` for the image and `1.46.0+unc35` for the wheels.
+
+`.github/workflows/indigo-ci.yaml` is itself contended — upstream changed it and so did this fork,
+which trims the matrix to `macos-14` and `ubuntu-latest` and disables Windows and i386. Resolve it
+deliberately: it is what publishes everything below.
+
+### What the pipeline produces
+
+`static_analysis` → `build_indigo_libs_{x86_64,aarch64}` → `build_indigo_wrappers`, which then fans
+out to the wheel publish, both service-image jobs, and the GitHub release.
+
+Everything hangs off `build_indigo_wrappers`, and it needs both lib builds. A single lib failure
+takes out the wheels, the images and the release together. That is the cascade the previous bump
+hit.
+
+Two image jobs run, and the older one is what production uses:
+
+- `build_test_publish_indigo_service_old` → `indigo-service:<tag>` and `:latest` — **deployed**
+- `build_test_publish_indigo_service_new` → `indigo-service:enhanced-<tag>` and `:enhanced-latest`
+  — consumed by nothing
+
+### The release is created as a draft
+
+`create_github_release` sets `draft: true`. Someone has to publish it. Until they do, the wheel URLs
+in the platform's `pyproject.toml` return 404, so Phase 5 cannot even be tested.
+
+### Verify filenames, not counts
+
+Release `indigo-1.34.0-unc-26` carries three assets named `epam.indigo-1.28.0rc997-*.whl` — a 1.34
+tag shipping wheels built from the previous 1.28 base, with a fallback version string that looks
+like `INDIGO_MAX_REVISION` firing because `git describe` matched no tag. Three assets attached,
+release published, nothing flagged it.
+
+So an asset count proves nothing. Read the names:
+
+```
+gh api repos/uncountableinc/Indigo/releases/tags/indigo-1.46.0-unc35 --jq '.assets[].name'
+```
+
+Every filename must carry the version just tagged, and there must be three: `macosx_11_0_arm64`,
+`manylinux1_x86_64`, `manylinux2014_aarch64`.
+
+### `:latest` moves under local environments
+
+`_old` pushes `:latest` on every tagged release, and local development runs
+`indigo-service:latest`. Nothing pins it, so every local environment follows the newest release as
+soon as it is published — which is how a local/production mismatch appears without anyone changing
+anything. Expect local setups to jump to 1.46 the moment this release publishes, ahead of Phase 5.
 
 ## Phase 5 — move the platform
 
