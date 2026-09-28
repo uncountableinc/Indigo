@@ -95,7 +95,7 @@ jobs:
             /bin/sh -c "
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF && -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target all -- -j $(nproc) &&
             ctest --verbose
             "
@@ -236,7 +236,7 @@ jobs:
             /bin/sh -c "
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64 && -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake .. -DBUILD_INDIGO=ON -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_SYSTEM_PROCESSOR_LOWER=aarch64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target all -- -j $(nproc) &&
             ctest --verbose -R dlopen
             "
@@ -977,7 +977,7 @@ jobs:
             /bin/sh -c "
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DBUILD_INDIGO_UTILS=ON && -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake .. -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_BINGO=OFF -DBUILD_BINGO_ELASTIC=OFF -DBUILD_INDIGO_UTILS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target all -- -j $(nproc) &&
             ctest --verbose
             "
@@ -1024,7 +1024,7 @@ jobs:
             set -eux &&
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF && -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake .. -DBUILD_BINGO_ORACLE=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_POSTGRES=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target package-bingo-oracle -- -j $(nproc)
             "
       - name: Upload artifacts
@@ -1202,7 +1202,7 @@ jobs:
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/rh/httpd24/root/usr/lib64 &&
             mkdir build &&
             cd build &&
-            cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_PREFIX_PATH=/usr/pgsql-${{ matrix.postgres_major_version }} && -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake .. -DBUILD_BINGO_POSTGRES=ON -DBUILD_BINGO_SQLSERVER=OFF -DBUILD_BINGO_ORACLE=OFF -DBUILD_INDIGO=OFF -DBUILD_INDIGO_WRAPPERS=OFF -DBUILD_INDIGO_UTILS=OFF -DBUILD_BINGO_ELASTIC=OFF -DCMAKE_PREFIX_PATH=/usr/pgsql-${{ matrix.postgres_major_version }} -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
             cmake --build . --config Release --target package-bingo-postgres -- -j $(nproc)
             "
       - name: Upload artifacts
