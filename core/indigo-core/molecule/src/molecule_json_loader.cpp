@@ -307,7 +307,7 @@ void MoleculeJsonLoader::parseAtoms(const rapidjson::Value& atoms, BaseMolecule&
             if (atom_type == "rg-label")
             {
                 // Allow "$refs" to not exist or be empty
-                if (a["$refs"].Size() == 0 || !a.HasMember("$refs"))
+                if (!a.HasMember("$refs") || a["$refs"].Size() == 0)
                 {
                     elem = ELEM_RSITE;
                     label = "R";

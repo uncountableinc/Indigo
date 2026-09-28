@@ -19,6 +19,12 @@ A file owned by more than one patch (`molecule_sgroups.cpp`, `molfile_saver.cpp`
 `molecule_cip_calculator.cpp`, `molecule_cdxml_loader.cpp`) must be checked against every patch
 listed for it. Resolving it for one patch and moving on is how the other gets dropped.
 
+**Never conclude a patch is unique to this fork from a grep scoped to its own file.** Upstream
+split `molfile_loader.cpp` into `molfile_loader.cpp` and `molfile_loader_v2000.cpp`, so a
+file-scoped search says upstream lost a reader it merely moved. Search the whole tree, and prefer
+running the behaviour against an upstream `epam.indigo` wheel over reading either tree — that is
+how the `SST` claim below was caught and corrected.
+
 ## The patches
 
 Collisions are against `indigo-1.34.0..indigo-1.46.0`.
@@ -45,7 +51,7 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 - `molecule_sgroups.h` / `molecule_sgroups.cpp` — COP copolymer, COM/MON/MIX
 - `molecule_json_loader.cpp` — COM/MON/MIX, rg-label without `$refs`
 - `molecule_json_saver.cpp` — COM/MON/MIX
-- `molfile_loader.cpp` — COP copolymer (`SST` reader only), COM/MON/MIX
+- `molfile_loader.cpp` — COM/MON/MIX
 - `molfile_saver.cpp` — COP copolymer (v2000 `M SCN` only), COM/MON/MIX, bracket export,
   multi-string wrapping
 - `base_molecule.cpp` — COM/MON/MIX
@@ -60,13 +66,21 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 
 ## Coverage
 
-Eight patches have a test. Four do not: the residual COP sites, the rg-label `$refs` handling, the
-multi-string wrapping and the gross formula isotope reset. The last three were found while doing
-Phase 1 and were absent from this inventory entirely, so they had nothing speaking for them; treat
-their files as the ones most likely to lose a patch at the merge.
+Every patch that can be tested now has one. The three added while doing Phase 1 —
+`formats/unc_sgroup_cop_molfile`, `basic/unc_rgroup_label_without_refs` and
+`formats/unc_molfile_multistring_wrap` — were characterised against the fork's own
+`epam.indigo-1.34.0+unc34` wheel and each was confirmed to produce different output on an upstream
+1.46 wheel, so each one fails if its patch is dropped.
 
-COP was originally listed as untested because it was to be dropped whole. It is not — three of its
-eight sites survive, and they are untested.
+**The gross formula isotope reset cannot be tested, because it changes nothing.**
+`MoleculeGrossFormula::collect` allocates its `GROSS_UNITS` with `make_unique` on every call, so
+the units are always fresh and `unit.isotopes = std::map<int, int>()` clears a map that is already
+empty. Eight scenarios covering isotopes across components and repeated calls give byte-identical
+output on this fork and on upstream 1.46. Keep the line or drop it at the merge; neither choice has
+a consequence.
+
+COP was originally listed as untested because it was to be dropped whole. It is not — two of its
+eight sites survive.
 
 The five listed above were written as characterisation tests against this fork before any bump, so
 they describe behaviour that already exists rather than behaviour a merge produced. Each names, in
@@ -100,11 +114,9 @@ independently for those five sites, and they were dropped in Phase 1.
 
 Three COP sites survive, because upstream has no equivalent:
 
-- The `SST` reader in `molfile_loader.cpp`. Upstream 1.46 *writes* `M  SST` for any S-group
-  subtype but reads a subtype only from KET, so without this reader a subtype written to a molfile
-  cannot be read back — for SRU as well as COP.
 - The v2000 `M  SCN` writer in `molfile_saver.cpp`. Upstream writes `SCN` only for SRU, so COP
-  connectivity is lost in v2000 output without it.
+  connectivity is lost in v2000 output without it. Confirmed by running the test below against
+  upstream 1.46, which prints `M  SCN: []`.
 - The COP arm of `_updateRepeatingUnits` in `molecule_layout.cpp`, which places brackets. Upstream
   matches `SG_TYPE_SRU` alone.
 

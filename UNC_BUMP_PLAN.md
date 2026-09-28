@@ -53,9 +53,12 @@ conflict:
 
 Kept, because upstream has no equivalent — see the inventory for what each one does:
 
-- the `SST` reader in `molfile_loader.cpp`
 - the v2000 `M  SCN` writer in `molfile_saver.cpp`
 - the COP arm of `_updateRepeatingUnits` in `molecule_layout.cpp`
+
+The `SST` reader in `molfile_loader.cpp` was kept in Phase 1 on a file-scoped grep that said
+upstream had none. Upstream moved it into a new `molfile_loader_v2000.cpp`. Drop ours at the
+merge; `formats/unc_sgroup_cop_molfile` covers the round trip either way.
 
 `CopolymerGroup` and its `addSGroup` case stay too, although upstream carries both, because the
 kept `M  SCN` writer depends on the class. The merge conflicts trivially there; take upstream's.
