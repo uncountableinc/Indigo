@@ -25,7 +25,7 @@
                     0.0
                 ],
                 "stereoLabel": "&1",
-                "cip": "S"
+                "cip": "RS"
             },
             {
                 "label": "S",
@@ -53,7 +53,7 @@
                     0.0
                 ],
                 "stereoLabel": "&1",
-                "cip": "R"
+                "cip": "RS"
             },
             {
                 "label": "C",

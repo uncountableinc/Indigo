@@ -19404,7 +19404,7 @@ CDXML loader: Not a molecule. Found 1 arrows.
             {
                 "label": "Na",
                 "location": [
-                    4.169333457946777,
+                    4.161166667938232,
                     -0.16833330690860749,
                     0.0
                 ]
@@ -19412,7 +19412,7 @@ CDXML loader: Not a molecule. Found 1 arrows.
             {
                 "label": "O",
                 "location": [
-                    4.6476664543151859,
+                    4.639499664306641,
                     -0.16833330690860749,
                     0.0
                 ]

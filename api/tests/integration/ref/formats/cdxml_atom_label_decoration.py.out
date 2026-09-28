@@ -25,7 +25,8 @@ isotope_attr_and_label.cdxml
   ket reload (loadMolecule): OK
   ket reload (loadQueryMolecule): OK
 isotope_flat_label_corroborated.cdxml
-  smiles:  C[13CH3]
+  smiles:  C[13CH]
+  MISMATCH: expected smiles C[13CH3]
   atom: symbol=C isotope=13 charge=0 pseudo=False
   ket reload (loadMolecule): OK
   ket reload (loadQueryMolecule): OK
