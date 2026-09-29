@@ -262,7 +262,8 @@ namespace indigo
         return KETFontStyle::FontStyle::ENone;
     }
 
-    SimpleTextObject::SimpleTextObject(const Rect2f& bbox, const std::string& content) : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}
+    SimpleTextObject::SimpleTextObject(const Rect2f& bbox, const std::string& content)
+        : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}, _version(Versions::ONE)
     {
         using namespace rapidjson;
         _bbox = bbox;
@@ -329,11 +330,11 @@ namespace indigo
         }
     }
 
-    SimpleTextObject::SimpleTextObject() : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}, _bbox{}
+    SimpleTextObject::SimpleTextObject() : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}, _bbox{}, _version(Versions::TWO)
     {
     }
 
-    SimpleTextObject::SimpleTextObject(const rapidjson::Value& text_obj) : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}
+    SimpleTextObject::SimpleTextObject(const rapidjson::Value& text_obj) : MetaObject(CID), _alignment{}, _indent{}, _font_styles{}, _version(Versions::TWO)
     {
         using namespace rapidjson;
 

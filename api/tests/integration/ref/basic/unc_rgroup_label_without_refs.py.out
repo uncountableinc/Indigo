@@ -1,0 +1,4 @@
+*** an rg-label atom loads without a group reference ***
+absent $refs: atoms=2 smiles=[*]C
+empty $refs: atoms=2 smiles=[*]C
+numbered $refs: atoms=2 smiles=[*:1]C |$_R1;$|

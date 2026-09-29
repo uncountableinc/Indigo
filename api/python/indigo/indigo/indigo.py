@@ -636,7 +636,7 @@ class Indigo:
         )
 
     def loadMonomerLibrary(self, string):
-        """Loads monomer library from ket string
+        """Loads monomer library from ket/sdf string
 
         Args:
             string (str): ket
@@ -656,7 +656,7 @@ class Indigo:
         )
 
     def loadMonomerLibraryFromFile(self, filename):
-        """Loads monomer library from from file in ket format
+        """Loads monomer library from from file in ket/sdf format
 
         Args:
             string (str): full path to the file with ket
@@ -898,6 +898,98 @@ class Indigo:
             self,
             IndigoLib.checkResult(
                 self._lib().indigoLoadHelmFromFile(
+                    filename.encode(), library.id
+                )
+            ),
+        )
+
+    def loadBiln(self, string, library):
+        """Loads molecule from BILN string
+
+        Args:
+            string (str): sequence string
+            library (IndigoObject): monomer library object
+
+        Returns:
+            IndigoObject: loaded query molecular structure
+
+        Raises:
+            IndigoException: Exception if structure format is incorrect
+        """
+
+        return IndigoObject(
+            self,
+            IndigoLib.checkResult(
+                self._lib().indigoLoadBilnFromString(
+                    string.encode(), library.id
+                )
+            ),
+        )
+
+    def loadBilnFromFile(self, filename, library):
+        """Loads query molecule from file in BILN sequence format
+
+        Args:
+            filename (str): full path to the file with sequence string
+            library (IndigoObject): monomer library object
+
+        Returns:
+            IndigoObject: loaded query molecular structure
+
+        Raises:
+            IndigoException: Exception if structure format is incorrect
+        """
+
+        return IndigoObject(
+            self,
+            IndigoLib.checkResult(
+                self._lib().indigoLoadBilnFromFile(
+                    filename.encode(), library.id
+                )
+            ),
+        )
+
+    def loadAxoLabs(self, string, library):
+        """Loads molecule from AxoLabs string
+
+        Args:
+            string (str): sequence string
+            library (IndigoObject): monomer library object
+
+        Returns:
+            IndigoObject: loaded query molecular structure
+
+        Raises:
+            IndigoException: Exception if structure format is incorrect
+        """
+
+        return IndigoObject(
+            self,
+            IndigoLib.checkResult(
+                self._lib().indigoLoadAxoLabsFromString(
+                    string.encode(), library.id
+                )
+            ),
+        )
+
+    def loadAxoLabsFromFile(self, filename, library):
+        """Loads query molecule from file in AxoLabs sequence format
+
+        Args:
+            filename (str): full path to the file with sequence string
+            library (IndigoObject): monomer library object
+
+        Returns:
+            IndigoObject: loaded query molecular structure
+
+        Raises:
+            IndigoException: Exception if structure format is incorrect
+        """
+
+        return IndigoObject(
+            self,
+            IndigoLib.checkResult(
+                self._lib().indigoLoadAxoLabsFromFile(
                     filename.encode(), library.id
                 )
             ),

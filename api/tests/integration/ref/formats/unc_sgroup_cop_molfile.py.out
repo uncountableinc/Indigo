@@ -1,0 +1,5 @@
+*** a COP sgroup survives a v2000 molfile round trip ***
+M  STY: ['M  STY  1   1 COP']
+M  SCN: ['M  SCN  1   1 EU']
+M  SST: ['M  SST  1   1 RAN']
+reloaded: type=COP subtype=RAN connectivity=EU

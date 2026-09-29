@@ -217,6 +217,26 @@ mol = indigo.loadMoleculeFromFile(cdxml_fname)
 renderer.renderToFile(mol, joinPathPy("out/" + png_fname, __file__))
 print(checkImageSimilarity(png_fname))
 
+print("issue 2900 cip always render")
+indigo.resetOptions()
+indigo.setOption("render-output-format", "png")
+fname = "cip_labels_2900"
+png_fname = fname + ".png"
+cdxml_fname = joinPathPy("molecules/%s.cdxml" % fname, __file__)
+mol = indigo.loadMoleculeFromFile(cdxml_fname)
+renderer.renderToFile(mol, joinPathPy("out/" + png_fname, __file__))
+print(checkImageSimilarity(png_fname))
+
+print("issue 3049 missing stereolabels")
+indigo.resetOptions()
+indigo.setOption("render-output-format", "png")
+fname = "cip_labels_3049"
+png_fname = fname + ".png"
+ket_fname = joinPathPy("reactions/%s.ket" % fname, __file__)
+mol = indigo.loadReactionFromFile(ket_fname)
+renderer.renderToFile(mol, joinPathPy("out/" + png_fname, __file__))
+print(checkImageSimilarity(png_fname))
+
 if isIronPython():
     renderer.Dispose()
     indigo.Dispose()

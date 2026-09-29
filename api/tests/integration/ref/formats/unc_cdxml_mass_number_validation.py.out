@@ -1,0 +1,4 @@
+*** a drawn mass number is used only if the isotope exists ***
+gross formula: C6 9C 13C2 H18 D
+isotopes: [('C', 13), ('C', 13), ('H', 2), ('C', 9)]
+molecular weight: 127.262

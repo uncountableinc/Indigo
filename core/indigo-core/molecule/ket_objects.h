@@ -32,6 +32,7 @@
 #include "common/base_cpp/exception.h"
 #include "common/math/algebra.h"
 #include "molecule/idt_alias.h"
+#include "molecule/ket_annotation.h"
 #include "molecule/ket_obj_with_props.h"
 #include "molecule/monomers_defs.h"
 #include "molecule/transformation.h"
@@ -45,6 +46,7 @@ namespace indigo
 {
 
     class JsonWriter;
+    class KetObjectAnnotation;
     class MonomerTemplate;
     class MonomerTemplateLibrary;
 
@@ -61,7 +63,6 @@ namespace indigo
         const std::map<std::string, int>& getIntPropStrToIdx() const override;
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
 
-    private:
         enum class IntProps
         {
             degree,
@@ -135,10 +136,6 @@ namespace indigo
             return _query_properties;
         };
 
-    protected:
-        KetBaseAtom(atype atype) : KetBaseAtomType(atype){};
-
-    private:
         enum class IntProps
         {
             charge,
@@ -154,12 +151,18 @@ namespace indigo
             mapping,
             invRet
         };
+
         enum class StringProps
         {
             alias,
             stereoLabel,
             cip
         };
+
+    protected:
+        KetBaseAtom(atype atype) : KetBaseAtomType(atype){};
+
+    private:
         std::optional<KetQueryProperties> _query_properties;
     };
 
@@ -186,12 +189,13 @@ namespace indigo
             return _custom_query;
         };
 
-    private:
         enum class BoolProps
         {
             unsaturatedAtom,
             exactChangeFlag
         };
+
+    private:
         std::string _label;
         std::optional<std::string> _custom_query;
     };
@@ -210,13 +214,14 @@ namespace indigo
 
         const std::map<std::string, int>& getBoolPropStrToIdx() const override;
 
-    private:
         enum class BoolProps
         {
             unsaturatedAtom,
             exactChangeFlag,
             notlist
         };
+
+    private:
         std::vector<std::string> _atom_list;
     };
 
@@ -224,7 +229,7 @@ namespace indigo
     {
     public:
         using AttachemntOrder = std::vector<std::pair<int, int>>;
-        KetRgLabel() : KetBaseAtomType(atype::atom), _attachmentOrder(), _refs(){};
+        KetRgLabel() : KetBaseAtomType(atype::rg_label), _attachmentOrder(), _refs(){};
         inline void setAttachmentOrder(AttachemntOrder& attOrder)
         {
             _attachmentOrder = attOrder;
@@ -296,7 +301,6 @@ namespace indigo
             return _stereo_flag_position.value();
         }
 
-    private:
         enum class IntProps
         {
             stereo,
@@ -305,11 +309,12 @@ namespace indigo
             stereobox
         };
 
-        enum class StringProps
+        enum StringProps
         {
             cip
         };
 
+    private:
         bond_types _type;
         std::pair<int, int> _atoms;
         std::optional<Vec3f> _stereo_flag_position;
@@ -354,11 +359,12 @@ namespace indigo
 
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
 
-    private:
         enum class StringProps
         {
-            subscript
+            label
         };
+
+    private:
         std::string _connectivity;
     };
 
@@ -370,7 +376,6 @@ namespace indigo
         const std::map<std::string, int>& getIntPropStrToIdx() const override;
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
 
-    private:
         enum class IntProps
         {
             leavingAtom
@@ -379,6 +384,8 @@ namespace indigo
         {
             attachmentId
         };
+
+    private:
         int _attachment_atom;
     };
 
@@ -390,11 +397,12 @@ namespace indigo
 
         const std::map<std::string, int>& getBoolPropStrToIdx() const override;
 
-    private:
         enum class BoolProps
         {
             expanded
         };
+
+    private:
         std::string _name;
     };
 
@@ -420,7 +428,6 @@ namespace indigo
         const std::map<std::string, int>& getBoolPropStrToIdx() const override;
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
 
-    private:
         enum class BoolProps
         {
             display,
@@ -430,6 +437,8 @@ namespace indigo
         {
             context
         };
+
+    private:
         std::string _name;
         std::string _data;
         std::optional<std::vector<int>> _bonds;
@@ -544,12 +553,13 @@ namespace indigo
             return _leaving_group;
         };
 
-    private:
         enum class StringProps
         {
             type,
             label,
         };
+
+    private:
         int _attachment_atom;
         std::optional<std::vector<int>> _leaving_group;
     };
@@ -648,6 +658,37 @@ namespace indigo
             return _hydrogen_connections;
         };
 
+        bool selected() const;
+
+        void setAnnotation(const rapidjson::Value& json)
+        {
+            _annotation.emplace();
+            _annotation->parseOptsFromKet(json);
+        };
+
+        void setTextAnnotation(const std::string& text)
+        {
+            _annotation.emplace();
+            setKetStrProp(_annotation.value(), text, text);
+        };
+
+        void setAnnotation(const KetObjectAnnotation& annotation)
+        {
+            _annotation = annotation;
+        };
+
+        const std::optional<KetObjectAnnotation>& annotation() const
+        {
+            return _annotation;
+        };
+
+        const std::map<std::string, int>& getIntPropStrToIdx() const override;
+
+        enum class IntProps
+        {
+            seqid
+        };
+
     protected:
         MonomerType _monomer_type;
         std::string _id;
@@ -659,6 +700,7 @@ namespace indigo
         ket_connections_to_mol_type _connections_to_molecules;
         std::string _ref;
         std::set<std::string> _hydrogen_connections;
+        std::optional<KetObjectAnnotation> _annotation;
     };
 
     class DLLEXPORT KetMonomer : public KetBaseMonomer
@@ -676,8 +718,6 @@ namespace indigo
 
         const std::map<std::string, int>& getBoolPropStrToIdx() const override;
 
-        const std::map<std::string, int>& getIntPropStrToIdx() const override;
-
         void setTransformation(const Transformation& transform)
         {
             _transform = transform;
@@ -688,16 +728,13 @@ namespace indigo
             return _transform;
         }
 
-    private:
         enum class BoolProps
         {
             expanded,
             selected
         };
-        enum class IntProps
-        {
-            seqid
-        };
+
+    private:
         Transformation _transform;
     };
 
@@ -706,12 +743,15 @@ namespace indigo
     public:
         DECL_ERROR;
 
+        KetConnectionEndPoint() = default;
+        KetConnectionEndPoint(const KetConnectionEndPoint& other) = default;
+
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
 
-    private:
         enum class StringProps
         {
             groupId,
+            templateId,
             monomerId,
             moleculeId,
             atomId,
@@ -760,13 +800,34 @@ namespace indigo
         {
             if (!_id.has_value())
             {
-                _id.emplace(_ep1.getStringProp("monomerId") + _ep1.getStringProp("attachmentPointId") + _ep2.getStringProp("monomerId") +
-                            _ep2.getStringProp("attachmentPointId"));
+                _id.emplace(getKetStrProp(_ep1, monomerId) + getKetStrProp(_ep1, attachmentPointId) + getKetStrProp(_ep2, monomerId) +
+                            getKetStrProp(_ep2, attachmentPointId));
             }
             return _id.value();
         };
 
-    private:
+        void setAnnotation(const rapidjson::Value& json)
+        {
+            _annotation.emplace();
+            _annotation->parseOptsFromKet(json);
+        };
+
+        void setTextAnnotation(const std::string& text)
+        {
+            _annotation.emplace();
+            setKetStrProp(_annotation.value(), text, text);
+        };
+
+        void setAnnotation(const KetObjectAnnotation& annotation)
+        {
+            _annotation = annotation;
+        };
+
+        const std::optional<KetObjectAnnotation>& annotation() const
+        {
+            return _annotation;
+        };
+
         enum class StringProps
         {
             label,
@@ -777,10 +838,12 @@ namespace indigo
             selected,
         };
 
+    private:
         std::string _connection_type;
         KetConnectionEndPoint _ep1;
         KetConnectionEndPoint _ep2;
         std::optional<std::string> _id;
+        std::optional<KetObjectAnnotation> _annotation;
     };
 
     class DLLEXPORT KetAmbiguousMonomerOption : public KetObjWithProps
@@ -943,18 +1006,17 @@ namespace indigo
             _ref = ref_prefix + _id;
         };
 
-        const std::map<std::string, int>& getIntPropStrToIdx() const override;
         const std::map<std::string, int>& getStringPropStrToIdx() const override;
-
-    private:
-        enum class IntProps
-        {
-            seqid
-        };
+        const std::map<std::string, int>& getBoolPropStrToIdx() const override;
 
         enum class StringProps
         {
             alias
+        };
+
+        enum class BoolProps
+        {
+            selected
         };
     };
 

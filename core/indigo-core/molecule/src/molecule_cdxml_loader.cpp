@@ -414,8 +414,25 @@ auto MoleculeCdxmlLoader::bboxLambda(Rect2f& bbox)
 }
 
 MoleculeCdxmlLoader::MoleculeCdxmlLoader(Scanner& scanner, bool is_binary, bool is_fragment)
-    : _scanner(scanner), _is_binary(is_binary), _is_fragment(is_fragment), _has_bounding_box(false), _pmol(nullptr), _pqmol(nullptr), ignore_bad_valence(false)
+    : _scanner(scanner), _is_binary(is_binary), _is_fragment(is_fragment), _has_bounding_box(false), _pmol(nullptr), _pqmol(nullptr), ignore_bad_valence(false),
+      valence_mode(ValenceMode::BIOVIA_2009)
 {
+}
+
+void MoleculeCdxmlLoader::setOptions(const LoaderOptions& opts)
+{
+    stereochemistry_options = opts.stereochemistry_options;
+    ignore_bad_valence = opts.ignore_bad_valence;
+    valence_mode = opts.valence_mode;
+}
+
+LoaderOptions MoleculeCdxmlLoader::getOptions() const
+{
+    LoaderOptions opts;
+    opts.stereochemistry_options = stereochemistry_options;
+    opts.ignore_bad_valence = ignore_bad_valence;
+    opts.valence_mode = valence_mode;
+    return opts;
 }
 
 void MoleculeCdxmlLoader::_initMolecule(BaseMolecule& mol)
@@ -445,6 +462,7 @@ void MoleculeCdxmlLoader::_initMolecule(BaseMolecule& mol)
     {
         _pmol = &mol.asMolecule();
         _pmol->setIgnoreBadValenceFlag(ignore_bad_valence);
+        _pmol->setValenceMode(valence_mode);
     }
 }
 
@@ -1025,10 +1043,26 @@ void MoleculeCdxmlLoader::_addAtomsAndBonds(BaseMolecule& mol, const std::vector
             // would produce output that Indigo itself cannot read back.
             if (!is_pseudo_atom)
                 _pmol->setAtomIsotope(atom_idx, atom.isotope);
+            if (atom.hydrogens > 0)
+                _pmol->setImplicitH(atom_idx, atom.hydrogens);
+            const int element = atom.element;
+            // All metals up to group 13, set implicit hydrogens to 0 if set in the cdxml file (and valence to avoid (0) labels)
+            if (Element::isMetal(element))
+            {
+                if (atom.hydrogens == 0)
+                {
+                    _pmol->setImplicitH(atom_idx, atom.hydrogens);
+                    _pmol->setValence(atom_idx, atom.valence);
+                }
+            }
             const auto it = kIndexToCIPDesc.find(atom.stereo);
             if (it != kIndexToCIPDesc.end())
             {
-                _pmol->setAtomCIP(atom_idx, it->second);
+                if (it->second != CIPDesc::UNKNOWN)
+                {
+                    _pmol->setAtomCIP(atom_idx, it->second);
+                    _pmol->setShowAtomCIP(atom_idx, atom.showAtomStereo);
+                }
             }
             if (is_pseudo_atom)
                 _pmol->setPseudoAtom(atom_idx, atom.label.c_str());
@@ -1181,7 +1215,7 @@ void MoleculeCdxmlLoader::_addBracket(BaseMolecule& mol, const CdxmlBracket& bra
                 if (bracket.usage == kCDXBracketUsage_MultipleGroup)
                 {
                     MultipleGroup& mg = (MultipleGroup&)sgroup;
-                    if (mg.multiplier)
+                    if (mg.multiplier != 0)
                         mg.parent_atoms.push(atom_idx);
                 }
             }
@@ -1198,8 +1232,8 @@ void MoleculeCdxmlLoader::_addBracket(BaseMolecule& mol, const CdxmlBracket& bra
         {
             Superatom& sa = (Superatom&)sgroup;
             sa.contracted = DisplayOption::Contracted;
-            sa.subscript.readString(bracket.label.c_str(), true);
-            sa.display_position.copy(bracket.superatom_position);
+            sa.label.readString(bracket.label.c_str(), true);
+            sa.display_position.set(Vec3f(bracket.superatom_position.x, bracket.superatom_position.y, bracket.superatom_position.z));
         }
         else
             switch (bracket.usage)
@@ -1207,7 +1241,7 @@ void MoleculeCdxmlLoader::_addBracket(BaseMolecule& mol, const CdxmlBracket& bra
             case kCDXBracketUsage_SRU: {
                 RepeatingUnit& ru = (RepeatingUnit&)sgroup;
                 ru.connectivity = bracket.repeat_pattern;
-                ru.subscript.readString(bracket.label.c_str(), true);
+                ru.label.readString(bracket.label.c_str(), true);
             }
             break;
             case kCDXBracketUsage_MultipleGroup: {
@@ -1285,11 +1319,12 @@ void MoleculeCdxmlLoader::_handleSGroup(SGroup& sgroup, const std::unordered_set
         int rep_start = mapping[start];
         int rep_end = mapping[end];
         MultipleGroup& mg = (MultipleGroup&)sgroup;
-        if (mg.multiplier > 1)
+        const int multiplier = mg.multiplier.value_or(0);
+        if (multiplier > 1)
         {
             int start_order = start_bond > 0 ? bmol.getBondOrder(start_bond) : -1;
             int end_order = end_bond > 0 ? bmol.getBondOrder(end_bond) : -1;
-            for (int j = 0; j < mg.multiplier - 1; j++)
+            for (int j = 0; j < multiplier - 1; j++)
             {
                 bmol.mergeWithMolecule(*rep, &mapping, 0);
                 int k;
@@ -1384,6 +1419,26 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
             node.stereo = CIPStereochemistry::Undetermined;
     };
 
+    auto show_stereo_lambda = [&node](const std::string& data) {
+        const std::string lowercaseYes = "yes";
+        if (lowercaseYes.length() != data.length())
+        {
+            node.showAtomStereo = false;
+            return;
+        }
+
+        for (size_t i = 0; i < data.length(); ++i)
+        {
+            if (lowercaseYes[i] != std::tolower(data[i]))
+            {
+                node.showAtomStereo = false;
+                return;
+            }
+        }
+
+        node.showAtomStereo = true;
+    };
+
     auto node_type_lambda = [&node](const std::string& data) {
         node.type = KNodeTypeNameToInt.at(data);
         if (node.type == kCDXNodeType_NamedAlternativeGroup)
@@ -1412,6 +1467,7 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
         {"Isotope", intLambda(node.isotope)},
         {"Radical", radical_lambda},
         {"AS", stereo_lambda},
+        {"ShowAtomStereo", show_stereo_lambda},
         {"NodeType", node_type_lambda},
         {"Element", intLambda(node.element)},
         {"GenericNickname", strLambda(node.label)},
@@ -1453,7 +1509,17 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
                 if (!_applyDecoratedLabel(node, runs) && node.label.empty())
                 {
                     node.label = label;
-                    node.element = ELEM_PSEUDO;
+                    // Catch the case when the element attribute isn't given
+                    // (and assumed to be carbon). Bug #3060
+                    std::regex match(R"(^\d{0,2}(CH|CH2|CH3)$)");
+                    if (std::regex_match(label, match))
+                    {
+                        node.element = ELEM_C;
+                    }
+                    else
+                    {
+                        node.element = ELEM_PSEUDO;
+                    }
                 }
             }
         }
@@ -1845,13 +1911,17 @@ void MoleculeCdxmlLoader::_parseLabel(BaseCDXElement& elem, std::string& label)
         label += run.text;
 }
 
-// A leading superscript on an atom label is a mass number: digits only, in a plausible range.
-static bool parseMassNumberDecoration(const std::string& text, int& isotope)
+// A leading superscript on an atom label is a mass number: digits only, and an isotope this
+// element actually has. Element::getIsotopicComposition reads the same table that
+// Element::getRelativeIsotopicMass throws from, so accepting only what it knows keeps a drawn
+// label such as "100C" from producing an atom whose weight cannot be computed.
+static bool parseMassNumberDecoration(const std::string& text, int element, int& isotope)
 {
     if (text.empty() || text.size() > 3 || !std::all_of(text.begin(), text.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
         return false;
     const int value = std::stoi(text);
-    if (value < 1 || value > 300)
+    double isotopic_composition = 0;
+    if (!Element::getIsotopicComposition(element, value, isotopic_composition))
         return false;
     isotope = value;
     return true;
@@ -1998,7 +2068,7 @@ bool MoleculeCdxmlLoader::_applyDecoratedLabel(CdxmlNode& node, const std::vecto
 
     // Reaching here with a leading superscript means the D/T branch above did not fire, so
     // isotope is still unset.
-    if (leading_super.size() && !parseMassNumberDecoration(leading_super, isotope))
+    if (leading_super.size() && !parseMassNumberDecoration(leading_super, element, isotope))
         return false;
 
     int charge = 0;
