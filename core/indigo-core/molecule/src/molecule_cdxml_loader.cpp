@@ -1911,13 +1911,17 @@ void MoleculeCdxmlLoader::_parseLabel(BaseCDXElement& elem, std::string& label)
         label += run.text;
 }
 
-// A leading superscript on an atom label is a mass number: digits only, in a plausible range.
-static bool parseMassNumberDecoration(const std::string& text, int& isotope)
+// A leading superscript on an atom label is a mass number: digits only, and an isotope this
+// element actually has. Element::getIsotopicComposition reads the same table that
+// Element::getRelativeIsotopicMass throws from, so accepting only what it knows keeps a drawn
+// label such as "100C" from producing an atom whose weight cannot be computed.
+static bool parseMassNumberDecoration(const std::string& text, int element, int& isotope)
 {
     if (text.empty() || text.size() > 3 || !std::all_of(text.begin(), text.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
         return false;
     const int value = std::stoi(text);
-    if (value < 1 || value > 300)
+    double isotopic_composition = 0;
+    if (!Element::getIsotopicComposition(element, value, isotopic_composition))
         return false;
     isotope = value;
     return true;
@@ -2064,7 +2068,7 @@ bool MoleculeCdxmlLoader::_applyDecoratedLabel(CdxmlNode& node, const std::vecto
 
     // Reaching here with a leading superscript means the D/T branch above did not fire, so
     // isotope is still unset.
-    if (leading_super.size() && !parseMassNumberDecoration(leading_super, isotope))
+    if (leading_super.size() && !parseMassNumberDecoration(leading_super, element, isotope))
         return false;
 
     int charge = 0;
