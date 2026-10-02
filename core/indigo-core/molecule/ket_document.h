@@ -214,7 +214,12 @@ namespace indigo
             return _monomer_shapes;
         }
 
-        int moleculeIdxByRef(const std::string& ref);
+        int moleculeIdxByRef(const std::string& ref) const;
+
+        bool hasMoleculeRef(const std::string& ref) const
+        {
+            return _mol_ref_to_idx.count(ref) > 0;
+        }
 
         rapidjson::Document& jsonDocument()
         {

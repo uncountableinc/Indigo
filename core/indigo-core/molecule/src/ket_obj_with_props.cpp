@@ -94,23 +94,43 @@ std::pair<bool, int> KetObjWithProps::getStringPropIdx(const std::string& name) 
 
 void KetObjWithProps::parseOptsFromKet(const rapidjson::Value& json)
 {
+    // [Uncountable] Check each value's type. rapidjson asserts on a Get of the wrong type, which aborts the process.
+    // Ketcher writes a connection's atomId as an integer, so a string property also takes an integer.
     // Parse bool props
     for (auto it : getBoolPropStrToIdx())
     {
         if (json.HasMember(it.first.c_str()))
-            setBoolProp(it.second, json[it.first.c_str()].GetBool());
+        {
+            const auto& val = json[it.first.c_str()];
+            if (!val.IsBool())
+                throw Error("property '%s' must be a boolean", it.first.c_str());
+            setBoolProp(it.second, val.GetBool());
+        }
     }
     // Parse int props
     for (auto it : getIntPropStrToIdx())
     {
         if (json.HasMember(it.first.c_str()))
-            setIntProp(it.second, json[it.first.c_str()].GetInt());
+        {
+            const auto& val = json[it.first.c_str()];
+            if (!val.IsInt())
+                throw Error("property '%s' must be an integer", it.first.c_str());
+            setIntProp(it.second, val.GetInt());
+        }
     }
     // Parse string props
     for (auto it : getStringPropStrToIdx())
     {
         if (json.HasMember(it.first.c_str()))
-            setStringProp(it.second, json[it.first.c_str()].GetString());
+        {
+            const auto& val = json[it.first.c_str()];
+            if (val.IsString())
+                setStringProp(it.second, val.GetString());
+            else if (val.IsInt())
+                setStringProp(it.second, std::to_string(val.GetInt()));
+            else
+                throw Error("property '%s' must be a string", it.first.c_str());
+        }
     }
 };
 

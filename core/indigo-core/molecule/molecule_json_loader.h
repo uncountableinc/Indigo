@@ -47,6 +47,10 @@ namespace indigo
     class MonomerTemplateLibrary;
     class KetDocument;
     class KetMolecule;
+    template <typename T>
+    class Array;
+    template <typename T>
+    class PtrArray;
 
     /*
      * Loader for JSON format
@@ -114,6 +118,7 @@ namespace indigo
 
     private:
         void parse_ket(rapidjson::Document& ket);
+        int _connectionMoleculeAtom(const rapidjson::Value& endpoint, PtrArray<Array<int>>& mol_mappings);
         static void fillXBondsAndBrackets(Superatom& sa, BaseMolecule& mol);
         rapidjson::Value& _mol_nodes;
 
@@ -128,6 +133,7 @@ namespace indigo
         std::unordered_map<std::string, int> _id_to_template;
         std::map<std::string, std::string> _template_ref_to_id;
         std::map<std::string, int> _monomer_ref_to_id;
+        std::map<std::string, int> _mol_ref_to_idx;
         Molecule* _pmol;
         QueryMolecule* _pqmol;
         std::vector<EnhancedStereoCenter> _stereo_centers;
