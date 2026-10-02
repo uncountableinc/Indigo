@@ -3432,7 +3432,8 @@ CEXPORT int indigoExpandMonomers(int item)
         }
         return 1;
     }
-    INDIGO_END(0);
+    // [Uncountable] Upstream returns 0 here, which the wrappers do not treat as a failure, so every expansion error was lost.
+    INDIGO_END(-1);
 }
 
 // [Sapio] FR-48004 Expose expandedMonomersToAtoms to Python API.
