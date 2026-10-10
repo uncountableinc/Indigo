@@ -1,4 +1,4 @@
-FROM python:3.10-slim-trixie
+FROM python:3.11-slim-trixie
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -51,7 +51,7 @@ COPY ./service/requirements.txt /opt/
 RUN pip3 install --no-cache-dir -r /opt/requirements.txt
 
 # Clean
-RUN apt purge -y unzip git && \
+RUN apt purge -y curl unzip && \
     apt autoremove -y && \
     rm -rf /opt/* /var/lib/apt/lists/*
 
