@@ -55,6 +55,8 @@ RUN apt purge -y curl unzip && \
     apt autoremove -y && \
     rm -rf /opt/* /var/lib/apt/lists/*
 
+RUN find / -xdev -type f -perm /6000 -exec chmod a-s {} +
+
 EXPOSE 80
 WORKDIR /srv/api
 # CMD gunicorn --bind 0.0.0.0:80 --workers=$(nproc) app:app
