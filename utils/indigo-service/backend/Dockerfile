@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM python:3.11-slim-trixie
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -9,16 +9,11 @@ RUN apt install -y --no-install-recommends \
         curl \
         libfreetype6-dev \
         libfontconfig1-dev \
-        python3 \
-        python3-pip \
-        python3-wheel \
-        python3-setuptools \
         redis-server \
         supervisor \
-        unzip \
-        uwsgi \
-        uwsgi-plugin-python3
+        unzip
 
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 # Setup celery
 COPY ./conf/celeryd.conf /etc/default/celeryd
 RUN useradd -ms /bin/bash celery || echo "User already exists."
@@ -56,7 +51,7 @@ COPY ./service/requirements.txt /opt/
 RUN pip3 install --no-cache-dir -r /opt/requirements.txt
 
 # Clean
-RUN apt purge -y unzip git python3-pip python3-wheel && \
+RUN apt purge -y curl unzip && \
     apt autoremove -y && \
     rm -rf /opt/* /var/lib/apt/lists/*
 
