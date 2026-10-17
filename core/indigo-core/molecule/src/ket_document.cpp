@@ -577,7 +577,7 @@ const std::string& KetDocument::monomerIdByRef(const std::string& ref)
     return it->second;
 }
 
-int KetDocument::moleculeIdxByRef(const std::string& ref)
+int KetDocument::moleculeIdxByRef(const std::string& ref) const
 {
     const auto& it = _mol_ref_to_idx.find(ref);
     if (it == _mol_ref_to_idx.end())

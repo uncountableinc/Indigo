@@ -1,0 +1,30 @@
+*** 1. monomer ids are not indexes ***
+chain of 3, ids 635/7/900 lay out as ids 0/1/2: True
+ring of 3, ids 635/7/900 lay out as ids 0/1/2: True
+two strands joined by a hydrogen bond lay out as each strand alone: True
+single monomer with id 635: C3 H7 N O2
+chain with ids 635/7/900: C9 H17 N3 O4
+leaving group atom out of range, expandMonomers: IndigoException: monomer template 'A': leaving group atom 42 is out of range (7 atoms)
+leaving group atom out of range, loadQueryMolecule: IndigoException: molecule json loader: monomer template: leaving group atom 42 is out of range (7 atoms)
+*** 2. ambiguous monomer ***
+single ambiguous monomer: expanded, transformation=False
+*** 3. connection to a molecule named by ref ***
+only molecule is mol1, loadMolecule: 3
+only molecule is mol1, loadQueryMolecule: 3
+only molecule is mol1, loadStructure: 3
+only molecule is mol1, expandMonomers: C5 H11 N O2
+KetDocument saves mol1 as: nodes=['mol0', 'monomer23'] connection=mol0
+integer atomId: 3
+integer atomId, expandMonomers: C5 H11 N O2
+attachmentPointId that is not a string, loadKetDocument: IndigoException: Ket Options: property 'attachmentPointId' must be a string
+unknown molecule: IndigoException: molecule json loader: Connection endpoint refers to unknown molecule 'mol7'
+atomId out of range: IndigoException: molecule json loader: Connection endpoint atom 9 is out of range for molecule 'mol0' (2 atoms)
+*** 4. rg-label atoms in a monomer template ***
+loadKetDocument: 2
+*** 5. monomer transformation with flip ***
+flip and rotate, KetDocument round trip: {'rotate': -0.785398, 'flip': 'vertical'}
+flip and rotate, molfile: C5 H11 N O2
+flip and rotate, expandMonomers then molfile: C5 H11 N O2
+flip only, KetDocument round trip: {'flip': 'horizontal'}
+flip only, molfile: C5 H11 N O2
+flip only, expandMonomers then molfile: C5 H11 N O2

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <graph/graph.h>
 #include <map>
+#include <optional>
 #include <queue>
 #include <string>
 #include <unordered_map>
@@ -26,13 +27,52 @@ namespace indigo
         float angle = 0.0f;            // neighbor angle in absolute coordinates
     };
 
+    // [Uncountable] Map each monomer id to its position in monomersIds(), the order that dimensions and the graph vertices follow.
+    // Ketcher writes ids that are neither sequential nor zero-based (e.g. "635"), so an id cannot be used as an index.
+    using MonomerIndex = std::unordered_map<std::string, int>;
+
+    static MonomerIndex getMonomerIndex(KetDocument& mol)
+    {
+        MonomerIndex index;
+        const auto& ids = mol.monomersIds();
+        for (size_t i = 0; i < ids.size(); ++i)
+            index.emplace(ids[i], static_cast<int>(i));
+        return index;
+    }
+
+    // [Uncountable] Monomer id at a connection endpoint, or an empty string when the endpoint is a molecule atom.
+    // Endpoints name monomers by ref ("monomer635"), which is not always "monomer" + id.
+    static std::string endpointMonomerId(KetDocument& mol, const KetConnectionEndPoint& ep)
+    {
+        if (!hasKetStrProp(ep, monomerId))
+            return std::string();
+        return mol.monomerIdByRef(getKetStrProp(ep, monomerId));
+    }
+
+    // [Uncountable] The selected flag has a different index in each monomer class, so read it through the real class.
+    static bool isMonomerSelected(const KetBaseMonomer& mon)
+    {
+        if (mon.monomerType() == KetBaseMonomer::MonomerType::Monomer)
+            return isKetBoolPropTrue(static_cast<const KetMonomer&>(mon), selected);
+        return isKetBoolPropTrue(static_cast<const KetAmbiguousMonomer&>(mon), selected);
+    }
+
+    // [Uncountable] Location of a leaving-group atom, checked against the template's atom count.
+    static const std::optional<Vec3f>& leavingGroupAtomLocation(const MonomerTemplate& tmpl, int atom_idx)
+    {
+        if (atom_idx < 0 || static_cast<size_t>(atom_idx) >= tmpl.atoms().size())
+            throw Exception("monomer template '%s': leaving group atom %d is out of range (%d atoms)", tmpl.id().c_str(), atom_idx,
+                            static_cast<int>(tmpl.atoms().size()));
+        return tmpl.atoms()[atom_idx]->location();
+    }
+
     // Set the expanded monomers and calculate the dimensions for each monomer as R1-R2 distance
     void getDimensions(KetDocument& mol, std::vector<float>& dimensions)
     {
         bool has_selection = false;
         for (const auto& monomerId : mol.monomersIds())
         {
-            if (isKetBoolPropTrue(static_cast<KetMonomer&>(*mol.getMonomerById(monomerId)), selected))
+            if (isMonomerSelected(*mol.getMonomerById(monomerId)))
             {
                 has_selection = true;
                 break;
@@ -40,7 +80,6 @@ namespace indigo
         }
         for (const auto& monomerId : mol.monomersIds())
         {
-            int id = std::stoi(monomerId);
             auto& monPtr = mol.getMonomerById(monomerId);
 
             // Skip if the monomer is not a monomer really
@@ -70,8 +109,8 @@ namespace indigo
                 if (leaves.size() >= 2)
                 {
                     // take first two for R1 and R2
-                    auto loc1 = tmpl.atoms()[leaves[0]]->location();
-                    auto loc2 = tmpl.atoms()[leaves[1]]->location();
+                    auto loc1 = leavingGroupAtomLocation(tmpl, leaves[0]);
+                    auto loc2 = leavingGroupAtomLocation(tmpl, leaves[1]);
                     if (loc1.has_value() && loc2.has_value())
                     {
                         auto v1 = loc1.value(), v2 = loc2.value();
@@ -83,7 +122,7 @@ namespace indigo
                 else if (leaves.size() == 1)
                 {
                     // single R-group: double distance to geometric center
-                    auto loc = tmpl.atoms()[leaves[0]]->location();
+                    auto loc = leavingGroupAtomLocation(tmpl, leaves[0]);
                     if (loc.has_value())
                     {
                         Vec2f center{0, 0};
@@ -119,13 +158,14 @@ namespace indigo
         // neighbor numbers
         for (const auto& conn : mol.connections())
         {
-
-            auto ref1 = getKetStrProp(conn.ep1(), monomerId);
-            auto ref2 = getKetStrProp(conn.ep2(), monomerId);
-            auto p1 = ref1.find_first_of("0123456789");
-            auto p2 = ref2.find_first_of("0123456789");
-            std::string id1 = (p1 != std::string::npos) ? ref1.substr(p1) : std::string();
-            std::string id2 = (p2 != std::string::npos) ? ref2.substr(p2) : std::string();
+            // [Uncountable] A bond to a molecule atom has no monomer at one end and takes no part in the monomer layout.
+            // Nor does a hydrogen bond: it has no attachment points, and between two strands it closes rings that overlap them.
+            if (conn.connectionType() == KetConnectionHydro)
+                continue;
+            std::string id1 = endpointMonomerId(mol, conn.ep1());
+            std::string id2 = endpointMonomerId(mol, conn.ep2());
+            if (id1.empty() || id2.empty() || id1 == id2)
+                continue;
             // capture attachment point (R-group) for each endpoint
             std::string ap1 = hasKetStrProp(conn.ep1(), attachmentPointId) ? getKetStrProp(conn.ep1(), attachmentPointId) : std::string();
             std::string ap2 = hasKetStrProp(conn.ep2(), attachmentPointId) ? getKetStrProp(conn.ep2(), attachmentPointId) : std::string();
@@ -136,18 +176,14 @@ namespace indigo
         // neighbor angles
         for (const auto& monId : mol.monomersIds())
         {
-            auto& monPtr = mol.getMonomerById(monId);
-            auto& mon = static_cast<KetMonomer&>(*monPtr);
-            Vec2f pos = mon.position().value_or(Vec2f{0, 0});
+            Vec2f pos = mol.getMonomerById(monId)->position().value_or(Vec2f{0, 0});
             auto it = neighborMap.find(monId);
             if (it == neighborMap.end())
                 continue;
             auto& specs = it->second;
             for (auto& spec : specs)
             {
-                auto& nPtr = mol.getMonomerById(spec.monomerId);
-                auto& nm = static_cast<KetMonomer&>(*nPtr);
-                Vec2f npos = nm.position().value_or(Vec2f{0, 0});
+                Vec2f npos = mol.getMonomerById(spec.monomerId)->position().value_or(Vec2f{0, 0});
                 Vec2f v{npos.x - pos.x, npos.y - pos.y};
                 spec.angle = std::atan2(v.y, v.x);
             }
@@ -155,20 +191,25 @@ namespace indigo
     }
 
     // Workaround to get the graph of macromolecule and use it for ring detection as for small molecules
-    void getGraph(KetDocument& mol, Graph& graph)
+    void getGraph(KetDocument& mol, const MonomerIndex& index, Graph& graph)
     {
         size_t n = mol.monomersIds().size();
         for (size_t i = 0; i < n; ++i)
             graph.addVertex();
         for (const auto& conn : mol.connections())
         {
-            auto r1 = getKetStrProp(conn.ep1(), monomerId);
-            auto r2 = getKetStrProp(conn.ep2(), monomerId);
-            auto p1 = r1.find_first_of("0123456789");
-            auto p2 = r2.find_first_of("0123456789");
-            int a = (p1 != std::string::npos) ? std::stoi(r1.substr(p1)) : 0;
-            int b = (p2 != std::string::npos) ? std::stoi(r2.substr(p2)) : 0;
-            graph.addEdge(a, b);
+            // [Uncountable] Vertices are monomer indexes, not ids. Skip molecule bonds, hydrogen bonds (see getNeighbors),
+            // and a second bond between the same two monomers.
+            if (conn.connectionType() == KetConnectionHydro)
+                continue;
+            std::string id1 = endpointMonomerId(mol, conn.ep1());
+            std::string id2 = endpointMonomerId(mol, conn.ep2());
+            if (id1.empty() || id2.empty())
+                continue;
+            int a = index.at(id1);
+            int b = index.at(id2);
+            if (a != b && !graph.haveEdge(a, b))
+                graph.addEdge(a, b);
         }
     }
 
@@ -176,6 +217,7 @@ namespace indigo
     void placeRingMonomers(KetDocument& mol, const std::vector<float>& dimensions, Graph& graph, std::unordered_map<std::string, Vec2f>& newPositions,
                            std::unordered_set<std::string>& placed)
     {
+        const auto& ids = mol.monomersIds();
         int ringCount = graph.sssrCount();
         for (int ci = 0; ci < ringCount; ++ci)
         {
@@ -198,9 +240,9 @@ namespace indigo
             Vec2f center{0, 0};
             for (auto idx : cycle)
             {
-                auto& m = static_cast<KetMonomer&>(*mol.getMonomerById(std::to_string(idx)));
-                center.x += m.position().value().x;
-                center.y += m.position().value().y;
+                Vec2f p = mol.getMonomerById(ids[idx])->position().value_or(Vec2f{0, 0});
+                center.x += p.x;
+                center.y += p.y;
             }
             center.x /= cycleSize;
             center.y /= cycleSize;
@@ -208,7 +250,7 @@ namespace indigo
             {
                 float ang = i * phi;
                 Vec2f pos{center.x + R * std::cos(ang), center.y + R * std::sin(ang)};
-                auto id = std::to_string(cycle[i]);
+                const auto& id = ids[cycle[i]];
                 newPositions[id] = pos;
                 placed.insert(id);
             }
@@ -216,8 +258,9 @@ namespace indigo
     }
 
     // BFS (Breadth First Search) for a Graph propagate positions for non-ring monomers
-    void bfsPropagate(KetDocument& mol, const std::vector<float>& dimensions, const std::unordered_map<std::string, std::vector<NeighborSpec>>& adjacency,
-                      std::unordered_map<std::string, Vec2f>& newPos, std::unordered_set<std::string>& placed)
+    void bfsPropagate(KetDocument& mol, const MonomerIndex& index, const std::vector<float>& dimensions,
+                      const std::unordered_map<std::string, std::vector<NeighborSpec>>& adjacency, std::unordered_map<std::string, Vec2f>& newPos,
+                      std::unordered_set<std::string>& placed)
     {
         // [Sapio] FR-48004 Expose expandedMonomersToAtoms to Python API.
         // Guard at function entry: if there are no monomers, there's nothing to propagate.
@@ -231,29 +274,26 @@ namespace indigo
         std::queue<std::string> q;
         for (auto& id : placed)
             q.push(id);
-        if (placed.empty())
+        // [Uncountable] Seed every connected component that has no ring, not only the first monomer.
+        // A component left unplaced has no entry in newPos, and applyTransformations then fails on it.
+        auto next_start = monomer_ids.begin();
+        while (true)
         {
-            // [Sapio] FR-48004 Expose expandedMonomersToAtoms to Python API.
-            // Additional safety check before accessing .front() - though we already checked at function entry,
-            // this provides defense-in-depth in case the function is called in unexpected ways.
-            if (monomer_ids.size() == 0)
+            if (q.empty())
             {
-                return; // No monomers to process, nothing to do
+                while (next_start != monomer_ids.end() && placed.count(*next_start))
+                    ++next_start;
+                if (next_start == monomer_ids.end())
+                    break;
+                const auto& start = *next_start;
+                newPos[start] = mol.getMonomerById(start)->position().value_or(Vec2f{0, 0});
+                placed.insert(start);
+                q.push(start);
             }
-            auto start = monomer_ids.front();
-            auto& m = static_cast<KetMonomer&>(*mol.getMonomerById(start));
-            Vec2f p = m.position().value_or(Vec2f{0, 0});
-            newPos[start] = p;
-            placed.insert(start);
-            q.push(start);
-        }
-        while (!q.empty())
-        {
             auto cur = q.front();
             q.pop();
             Vec2f cp = newPos[cur];
-            int ui = std::stoi(cur);
-            float du = dimensions[ui];
+            float du = dimensions[index.at(cur)];
             auto it = adjacency.find(cur);
             if (it == adjacency.end())
                 continue;
@@ -263,8 +303,7 @@ namespace indigo
                 const auto& nid = spec.monomerId;
                 if (placed.count(nid))
                     continue;
-                int vi = std::stoi(nid);
-                float dv = dimensions[vi];
+                float dv = dimensions[index.at(nid)];
                 float dist = (du + dv) * 0.5f;
                 float ang = spec.angle; // use precomputed angle
                 Vec2f pos{cp.x + dist * std::cos(ang), cp.y + dist * std::sin(ang)};
@@ -307,7 +346,11 @@ namespace indigo
     {
         for (const auto& id : mol.monomersIds())
         {
-            auto& m = static_cast<KetMonomer&>(*mol.getMonomerById(id));
+            // [Uncountable] An ambiguous monomer is a KetAmbiguousMonomer, not a KetMonomer, and has no single template to rotate.
+            auto& monPtr = mol.getMonomerById(id);
+            if (monPtr->monomerType() != KetBaseMonomer::MonomerType::Monomer)
+                continue;
+            auto& m = static_cast<KetMonomer&>(*monPtr);
             Vec2f pBase = m.position().value_or(Vec2f{0, 0});
             // find neighbors for this monomer
             auto itAdj = neighborMap.find(id);
@@ -352,15 +395,22 @@ namespace indigo
             // get leaving-group axis in template coords
             const auto& tmpl = mol.templates().at(m.templateId());
             const auto& appts = tmpl.attachmentPoints();
-            auto lg1 = appts.at(ap1).leavingGroup();
-            auto lg2 = appts.at(ap2).leavingGroup();
+            auto ap1_it = appts.find(ap1);
+            auto ap2_it = appts.find(ap2);
+            if (ap1_it == appts.end() || ap2_it == appts.end())
+            {
+                newAngles[id] = 0.0f;
+                continue;
+            }
+            auto lg1 = ap1_it->second.leavingGroup();
+            auto lg2 = ap2_it->second.leavingGroup();
             if (!lg1 || !lg2 || lg1->empty() || lg2->empty())
             {
                 newAngles[id] = 0.0f;
                 continue;
             }
-            auto loc1_opt = tmpl.atoms()[lg1->at(0)]->location();
-            auto loc2_opt = tmpl.atoms()[lg2->at(0)]->location();
+            auto loc1_opt = leavingGroupAtomLocation(tmpl, lg1->at(0));
+            auto loc2_opt = leavingGroupAtomLocation(tmpl, lg2->at(0));
             if (!loc1_opt.has_value() || !loc2_opt.has_value())
             {
                 newAngles[id] = 0.0f;
@@ -385,7 +435,11 @@ namespace indigo
     {
         for (const auto& id : mol.monomersIds())
         {
-            auto& m = static_cast<KetMonomer&>(*mol.getMonomerById(id));
+            // [Uncountable] Only a KetMonomer stores a transformation. Casting an ambiguous monomer wrote past the end of it.
+            auto& monPtr = mol.getMonomerById(id);
+            if (monPtr->monomerType() != KetBaseMonomer::MonomerType::Monomer)
+                continue;
+            auto& m = static_cast<KetMonomer&>(*monPtr);
             // determine rotation
             float rotation = 0.0f;
             auto it = newAngles.find(id);
@@ -412,19 +466,20 @@ namespace indigo
         }
 
         // fill all required for calculations
-        std::vector<float> dimensions;                                          // R1-R2 distance
+        MonomerIndex index = getMonomerIndex(mol);                              // monomer id -> position in monomersIds()
+        std::vector<float> dimensions;                                          // R1-R2 distance, by monomer index
         std::unordered_map<std::string, std::vector<NeighborSpec>> neighborMap; // monomerId -> neighbors with R-group info
         Graph graph;                                                            // workaround to run sssr for macromolecule
         getDimensions(mol, dimensions);
         getNeighbors(mol, neighborMap);
-        getGraph(mol, graph);
+        getGraph(mol, index, graph);
 
         // calculate new positions for ring monomers and non ring monomers
         std::unordered_map<std::string, Vec2f> newPositions;
         std::unordered_map<std::string, float> newAngles;
         std::unordered_set<std::string> placed;
         placeRingMonomers(mol, dimensions, graph, newPositions, placed);
-        bfsPropagate(mol, dimensions, neighborMap, newPositions, placed);
+        bfsPropagate(mol, index, dimensions, neighborMap, newPositions, placed);
         computeRotations(mol, neighborMap, newAngles);
 
         // transforming the output

@@ -316,7 +316,8 @@ void KetMolecule::parseKetAtoms(KetMolecule::atoms_type& ket_atoms, const rapidj
             {
                 auto& refs = atom["$refs"];
                 std::vector<std::string> ref_list;
-                for (SizeType r = 0; r < refs.Size(); i++)
+                // [Uncountable] Upstream increments i here, so the loop never ends and loadKetDocument hangs on any rg-label with $refs.
+                for (SizeType r = 0; r < refs.Size(); r++)
                 {
                     ref_list.emplace_back(refs[r].GetString());
                 }

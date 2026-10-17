@@ -45,6 +45,7 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 | CIP automorphism gate (MAT-82866) | 1 | 1 | `basic/unc_cip_symmetric_stereocentre` |
 | Abbreviation roles (MAT-77406) | 1 | 1 | 5 |
 | CDXML label styling (MAT-77102) | 2 | 2 | 20 |
+| KET monomer memory safety (MAT-90161, MAT-90032) | 8 | after 1.46 | `basic/unc_ket_monomer_expansion` |
 
 ### File ownership
 
@@ -63,6 +64,32 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 - `molecule_cdxml_loader.h` / `.cpp` — CDXML boronic acid, collapsed geometry, label styling
 - `reaction_multistep_detector.cpp` — abbreviation roles
 - `utils/indigo-service/backend/service/v2/indigo_api.py` — SDF reaction export
+- `mm_expand.cpp`, `ket_document.h` / `.cpp`, `ket_document_json_saver.cpp`, `ket_objects.cpp`,
+  `ket_obj_with_props.cpp`, `molecule_json_loader.h`, `indigo_molecule_operations.cpp` — KET monomer
+  memory safety; `molecule_json_loader.cpp` is shared with COM/MON/MIX and rg-label without `$refs`
+
+### KET monomer memory safety
+
+Six faults in upstream 1.46, found by running the 1,012 Ketcher autotest KET files that hold
+monomers through `loadKetDocument(...).expandMonomers()` and `loadStructure` under macOS Guard
+Malloc. Each site carries an `[Uncountable]` comment that says what upstream does. All six are
+still present on upstream `master` as of 2026-09-30.
+
+1. `mm_expand.cpp` indexed per-monomer vectors and graph vertices by monomer id, and Ketcher writes
+   ids such as `"635"`. It now maps each id to its position in `monomersIds()`, resolves endpoints
+   by ref, skips bonds to molecule atoms and hydrogen bonds, seeds every ring-free component, and
+   checks leaving-group atom indexes. `indigoExpandMonomers` returned `0` on error, which no
+   wrapper treats as a failure, so it now returns `-1`.
+2. `mm_expand.cpp` cast an ambiguous monomer to `KetMonomer` and wrote a transformation past its end.
+3. `molecule_json_loader.cpp` took N in `"molN"` as a position. It now looks the ref up and checks
+   the atom index; the KetDocument saver renames connection endpoints to the `mol<i>` names it
+   gives the nodes.
+4. `ket_objects.cpp` looped over `$refs` with `i++` instead of `r++`, so any rg-label with `$refs`
+   hung `loadKetDocument`.
+5. `ket_document_json_saver.cpp` wrote a flip under the key `"shift"`, and dropped a flip-only
+   transformation.
+6. `ket_obj_with_props.cpp` called `GetString()` on an integer `atomId`, and rapidjson's assertion
+   aborted the process. Values are now type-checked; a string property also takes an integer.
 
 ## Coverage
 

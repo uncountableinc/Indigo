@@ -84,8 +84,19 @@ static void saveOptionalAnnotation(JsonWriter& writer, const std::optional<KetOb
     }
 }
 
-static void saveConnectionEndpoint(JsonWriter& writer, const KetConnectionEndPoint& endpoint)
+static void saveConnectionEndpoint(JsonWriter& writer, const KetConnectionEndPoint& endpoint, const KetDocument* document)
 {
+    // [Uncountable] saveKetDocument renames each molecule node to "mol" + its index, so rename the endpoint to match.
+    // Upstream kept the original ref, which no longer names any node when the document's molecules were not mol0..molN-1.
+    if (document != nullptr && hasKetStrProp(endpoint, moleculeId))
+    {
+        KetConnectionEndPoint endpoint_to_save(endpoint);
+        const auto& ref = getKetStrProp(endpoint, moleculeId);
+        if (document->hasMoleculeRef(ref))
+            setKetStrProp(endpoint_to_save, moleculeId, "mol" + std::to_string(document->moleculeIdxByRef(ref)));
+        endpoint_to_save.saveOptsToKet(writer);
+        return;
+    }
     endpoint.saveOptsToKet(writer);
 }
 
@@ -105,7 +116,8 @@ static void saveMonomerTemplateConnectionEndpoint(JsonWriter& writer, const KetC
     endpoint_to_save.saveOptsToKet(writer);
 }
 
-static void saveConnections(JsonWriter& writer, const std::vector<KetConnection>& connections, const MonomerGroupTemplate* monomer_group_template = nullptr)
+static void saveConnections(JsonWriter& writer, const std::vector<KetConnection>& connections, const MonomerGroupTemplate* monomer_group_template = nullptr,
+                            const KetDocument* document = nullptr)
 {
     if (connections.empty())
         return;
@@ -122,14 +134,14 @@ static void saveConnections(JsonWriter& writer, const std::vector<KetConnection>
         if (monomer_group_template != nullptr)
             saveMonomerTemplateConnectionEndpoint(writer, connection.ep1(), *monomer_group_template);
         else
-            saveConnectionEndpoint(writer, connection.ep1());
+            saveConnectionEndpoint(writer, connection.ep1(), document);
         writer.EndObject();
         writer.Key("endpoint2");
         writer.StartObject();
         if (monomer_group_template != nullptr)
             saveMonomerTemplateConnectionEndpoint(writer, connection.ep2(), *monomer_group_template);
         else
-            saveConnectionEndpoint(writer, connection.ep2());
+            saveConnectionEndpoint(writer, connection.ep2(), document);
         writer.EndObject();
         saveOptionalAnnotation(writer, connection.annotation());
         writer.EndObject();
@@ -326,7 +338,8 @@ void KetDocumentJsonSaver::saveMonomer(JsonWriter& writer, const KetMonomer& mon
     saveStr(writer, "alias", monomer.alias());
     saveStr(writer, "templateId", monomer.templateId());
     const auto& transform = monomer.getTransformation();
-    if (transform.rotate != 0 || transform.shift.x != 0 || transform.shift.y != 0)
+    // [Uncountable] Upstream tests rotate and shift only, so a flip-only transformation was dropped.
+    if (transform.rotate != 0 || transform.shift.x != 0 || transform.shift.y != 0 || transform.flip != Transformation::FlipType::none)
     {
         writer.Key("transformation");
         writer.StartObject();
@@ -347,7 +360,8 @@ void KetDocumentJsonSaver::saveMonomer(JsonWriter& writer, const KetMonomer& mon
         }
         if (transform.flip != Transformation::FlipType::none)
         {
-            writer.Key("shift");
+            // [Uncountable] Upstream writes this under "shift", and the loader then reads shift.x from a string.
+            writer.Key("flip");
             writer.String(transform.getFlip());
         }
         writer.EndObject(); // transform
@@ -648,7 +662,7 @@ void KetDocumentJsonSaver::saveKetDocument(JsonWriter& writer, const KetDocument
         }
         writer.EndObject();
     }
-    saveConnections(writer, connections);
+    saveConnections(writer, connections, nullptr, &document);
     if (document.templatesIds().size() + document.ambiguousTemplatesIds().size() > 0)
     {
         writer.Key("templates");

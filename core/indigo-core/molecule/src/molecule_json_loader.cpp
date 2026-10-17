@@ -59,6 +59,7 @@ void MoleculeJsonLoader::parse_ket(Document& ket)
                 std::string node_type = node["type"].GetString();
                 if (node_type.compare("molecule") == 0)
                 {
+                    _mol_ref_to_idx.emplace(node_name, _mol_nodes.Size());
                     _mol_nodes.PushBack(node, ket.GetAllocator());
                 }
                 else if (node_type.compare("rgroup") == 0 && node_name.size() > 2)
@@ -1536,6 +1537,9 @@ int MoleculeJsonLoader::parseMonomerTemplate(const rapidjson::Value& monomer_tem
                     for (SizeType j = 0; j < atoms.Size(); j++)
                     {
                         auto la = atoms[j].GetInt();
+                        // [Uncountable] A query molecule's atom accessors do not check the index, so loadQueryMolecule read out of range here.
+                        if (la < 0 || la >= monomer_mol.vertexEnd() || !monomer_mol.hasVertex(la))
+                            throw Error("monomer template: leaving group atom %d is out of range (%d atoms)", la, monomer_mol.vertexCount());
                         sa.atoms.push(la);
                         leaving_atoms.insert(la);
                         int total_h = 0;
@@ -1686,6 +1690,45 @@ std::string MoleculeJsonLoader::monomerMolClass(const std::string& class_name)
 
     std::transform(mclass.begin(), mclass.end(), mclass.begin(), ::toupper);
     return mclass;
+}
+
+// [Uncountable] Resolve a connection endpoint {"moleculeId": "molN", "atomId": "K"} to an atom of the merged molecule.
+// Upstream reads N out of the ref and indexes mol_mappings with it unchecked, but N is the node's name, not its position:
+// a document whose only molecule is "mol1" read past the end of mol_mappings. Look the ref up instead, and check K.
+int MoleculeJsonLoader::_connectionMoleculeAtom(const rapidjson::Value& endpoint, PtrArray<Array<int>>& mol_mappings)
+{
+    const auto& mol_ref_val = endpoint["moleculeId"];
+    const auto& atom_id_val = endpoint["atomId"];
+    if (!mol_ref_val.IsString())
+        throw Error("Connection endpoint moleculeId must be a string");
+    std::string mol_ref = mol_ref_val.GetString();
+    int mol_idx = -1;
+    if (!_mol_ref_to_idx.empty())
+    {
+        auto it = _mol_ref_to_idx.find(mol_ref);
+        if (it == _mol_ref_to_idx.end())
+            throw Error("Connection endpoint refers to unknown molecule '%s'", mol_ref.c_str());
+        mol_idx = it->second;
+    }
+    else
+    {
+        // Built from bare molecule nodes, with no refs to look up.
+        mol_idx = extract_id(mol_ref, "mol");
+    }
+    if (mol_idx < 0 || mol_idx >= mol_mappings.size())
+        throw Error("Connection endpoint refers to unknown molecule '%s'", mol_ref.c_str());
+
+    int atom_idx = -1;
+    if (atom_id_val.IsString())
+        atom_idx = atoi(atom_id_val.GetString());
+    else if (atom_id_val.IsInt())
+        atom_idx = atom_id_val.GetInt();
+    else
+        throw Error("Connection endpoint atomId must be a string or an integer");
+    auto& mapping = mol_mappings[mol_idx];
+    if (atom_idx < 0 || atom_idx >= mapping.size())
+        throw Error("Connection endpoint atom %d is out of range for molecule '%s' (%d atoms)", atom_idx, mol_ref.c_str(), mapping.size());
+    return mapping[atom_idx];
 }
 
 void MoleculeJsonLoader::loadMolecule(BaseMolecule& mol, bool load_arrows)
@@ -2009,8 +2052,7 @@ void MoleculeJsonLoader::loadMolecule(BaseMolecule& mol, bool load_arrows)
         }
         else if (ep1.HasMember("moleculeId") && ep1.HasMember("atomId"))
         {
-            int mol_id = extract_id(ep1["moleculeId"].GetString(), "mol");
-            id1 = mol_mappings[mol_id][atoi(ep1["atomId"].GetString())];
+            id1 = _connectionMoleculeAtom(ep1, mol_mappings);
         }
         else
             throw Error("Invalid endpoint");
@@ -2023,8 +2065,7 @@ void MoleculeJsonLoader::loadMolecule(BaseMolecule& mol, bool load_arrows)
         }
         else if (ep2.HasMember("moleculeId") && ep2.HasMember("atomId"))
         {
-            int mol_id = extract_id(ep2["moleculeId"].GetString(), "mol");
-            id2 = mol_mappings[mol_id][atoi(ep2["atomId"].GetString())];
+            id2 = _connectionMoleculeAtom(ep2, mol_mappings);
         }
         else
             throw Error("Invalid endpoint");
