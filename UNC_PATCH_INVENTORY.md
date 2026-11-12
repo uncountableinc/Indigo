@@ -45,6 +45,7 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 | CIP automorphism gate (MAT-82866) | 1 | 1 | `basic/unc_cip_symmetric_stereocentre` |
 | Abbreviation roles (MAT-77406) | 1 | 1 | 5 |
 | CDXML label styling (MAT-77102) | 2 | 2 | 20 |
+| CDX header at input start (MAT-102111) | 1 | n/a | `formats/unc_cdxml_reaction_embedded_cdx_header` |
 
 ### File ownership
 
@@ -62,6 +63,7 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 - `meta_commons.cpp` — CIP R/S, CIP axial P/M
 - `molecule_cdxml_loader.h` / `.cpp` — CDXML boronic acid, collapsed geometry, label styling
 - `reaction_multistep_detector.cpp` — abbreviation roles
+- `reaction_auto_loader.cpp` — CDX header at input start
 - `utils/indigo-service/backend/service/v2/indigo_api.py` — SDF reaction export
 
 ## Coverage

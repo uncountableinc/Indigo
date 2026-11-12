@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">
+<CDXML BondLength="14.4">
+<page id="1">
+<fragment id="2"><n id="3" p="10 100"/><n id="4" p="24 100" Element="8"/><b id="5" B="3" E="4"/></fragment>
+<fragment id="6"><n id="7" p="200 100"/><n id="8" p="214 100" Element="53"/><b id="9" B="7" E="8"/></fragment>
+<arrow id="10" Head3D="180 100 0" Tail3D="100 100 0"/>
+<scheme id="11"><step id="12" ReactionStepReactants="2" ReactionStepProducts="6" ReactionStepArrows="10"/></scheme>
+<annotation Keyword="ChemDraw 12 data VjCD0100 embedded" Content="x"/>
+</page>
+</CDXML>
