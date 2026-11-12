@@ -182,7 +182,7 @@ std::unique_ptr<BaseReaction> ReactionAutoLoader::_loadReaction(bool query, Mono
 
     if (allow_all || input_format == "cdxml")
     {
-        if (local_scanner->findWord(kCDX_HeaderString))
+        if (local_scanner->startsWith(kCDX_HeaderString))
         {
             local_scanner->seek(kCDX_HeaderLength, SEEK_CUR);
             ReactionCdxmlLoader loader(*local_scanner, true);
