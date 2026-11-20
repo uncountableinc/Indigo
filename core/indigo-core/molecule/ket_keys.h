@@ -85,6 +85,8 @@ namespace indigo
         case SGroup::SG_TYPE_COM:
         case SGroup::SG_TYPE_MIX:
         case SGroup::SG_TYPE_FOR:
+        // unc: the ketcher fork's KET schema accepts MON; upstream KET carries no MON
+        case SGroup::SG_TYPE_MON:
             return true;
         default:
             return false;
