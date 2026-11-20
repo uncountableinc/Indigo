@@ -38,44 +38,45 @@ M  V30 12 1 15 16
 M  V30 END BOND
 M  V30 BEGIN SGROUP
 M  V30 1 DAT 1 ATOMS=(2 3 4) FIELDNAME="Long line" QUERYOP="   " FIELDDISP=" -
-M  V30    2.4985   -1.8557    DR    ALL  1       1  " FIELDDATA="asdljkfnalsj-
-M  V30 kdnfklaj nsdfkl jnasdkjlfnakls ndfkaljsn dlkfjna slkdnaklsnd asdf asdf-
-M  V30  as df asdf as df asd fa sdf asd fa sd fa sdf a sd f a s df asd fa sd -
-M  V30 fa sdf as df as df as df as df as df asd fa sd fa sd fa sd f asd fa sd-
-M  V30  f as dfa sd f a sd fa sdf a sdf                      "
+M  V30    2.4985   -1.8557    DR    ALL  1       1  " -
+M  V30 FIELDDATA="asdljkfnalsjkdnfklaj nsdfkl jnasdkjlfnakls ndfkaljsn -
+M  V30 dlkfjna slkdnaklsnd asdf asdf as df asdf as df asd fa sdf asd fa sd -
+M  V30 fa sdf a sd f a s df asd fa sd fa sdf as df as df as df as df as df -
+M  V30 asd fa sd fa sd fa sd f asd fa sd f as dfa sd f a sd fa sdf a sdf     -
+M  V30                  "
 M  V30 2 DAT 2 ATOMS=(2 8 9) FIELDNAME=Multiline QUERYOP="   " FIELDDISP="   -
 M  V30  2.5123   -1.6940    DR    ALL  1       1  " FIELDDATA="line 1        -
-M  V30                                                        " FIELDDATA="li-
-M  V30 ne 2                                                               " F-
-M  V30 IELDDATA="line 3                                                      -
-M  V30          " FIELDDATA="line 4                                          -
-M  V30                      "
-M  V30 3 DAT 3 ATOMS=(2 12 13) FIELDNAME=LongAndMultI QUERYOP="   " FIELDDISP-
-M  V30 ="    2.4985   -1.8557    DR    ALL  1       1  " FIELDDATA="line 1   -
-M  V30                                                             " FIELDDAT-
-M  V30 A="line 2                                                             -
-M  V30   " FIELDDATA="long long line long long line long long line long long -
-M  V30 line long long line long long line long long line long long line long -
+M  V30                                                        " -
+M  V30 FIELDDATA="line 2                                                     -
+M  V30           " FIELDDATA="line 3                                         -
+M  V30                       " FIELDDATA="line 4                             -
+M  V30                                   "
+M  V30 3 DAT 3 ATOMS=(2 12 13) FIELDNAME=LongAndMultI QUERYOP="   " -
+M  V30 FIELDDISP="    2.4985   -1.8557    DR    ALL  1       1  " -
+M  V30 FIELDDATA="line 1                                                     -
+M  V30           " FIELDDATA="line 2                                         -
+M  V30                       " FIELDDATA="long long line long long line long -
 M  V30 long line long long line long long line long long line long long line -
-M  V30 long long line long long line                                         -
-M  V30            "
-M  V30 4 DAT 4 ATOMS=(2 15 16) FIELDNAME="Line with spaces" QUERYOP="   " FIE-
-M  V30 LDDISP="    2.5756   -1.5083    DR    ALL  1       1  " FIELDDATA="asd-
-M  V30 fjknasdjkfn aslkjdnf alksdf                                     asdf a-
-M  V30 sdf as dfa sdf asdf                                      asdf         -
-M  V30         asdf                              asdf as dfa sdf             -
-M  V30                        asdf                                           -
-M  V30                                                    asdf       " FIELDD-
-M  V30 ATA="                                                                 -
-M  V30     " FIELDDATA="                                                     -
-M  V30                 " FIELDDATA="asdfasd                                  -
-M  V30                             " FIELDDATA="f                            -
-M  V30                                         " FIELDDATA="asdf             -
-M  V30                                                     " FIELDDATA="asd  -
-M  V30                                                                 " FIEL-
-M  V30 DDATA="fa                                                             -
-M  V30       " FIELDDATA="sdf                                                -
-M  V30                   "
+M  V30 long long line long long line long long line long long line long long -
+M  V30 line long long line long long line long long line                     -
+M  V30                                "
+M  V30 4 DAT 4 ATOMS=(2 15 16) FIELDNAME="Line with spaces" QUERYOP="   " -
+M  V30 FIELDDISP="    2.5756   -1.5083    DR    ALL  1       1  " -
+M  V30 FIELDDATA="asdfjknasdjkfn aslkjdnf alksdf                             -
+M  V30         asdf asdf as dfa sdf asdf                                     -
+M  V30  asdf                 asdf                              asdf as dfa -
+M  V30 sdf                                    asdf                           -
+M  V30                                                                    -
+M  V30 asdf       " FIELDDATA="                                              -
+M  V30                        " FIELDDATA="                                  -
+M  V30                                    " FIELDDATA="asdfasd               -
+M  V30                                                " FIELDDATA="f         -
+M  V30                                                            " -
+M  V30 FIELDDATA="asdf                                                       -
+M  V30           " FIELDDATA="asd                                            -
+M  V30                       " FIELDDATA="fa                                 -
+M  V30                                   " FIELDDATA="sdf                    -
+M  V30                                               "
 M  V30 END SGROUP
 M  V30 END CTAB
 M  END
