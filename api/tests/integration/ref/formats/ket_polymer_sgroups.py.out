@@ -37,7 +37,7 @@ rgroup-fragments-name-the-parent-2000.mol:SUCCEED
 rgroup-fragments-name-the-parent-3000.mol:SUCCEED
 *** Input that is rejected ***
 rejected-type-lowercase: molecule json loader: S-group #0 of molecule #0 has type 'sru', which is not a KET S-group type
-rejected-type-mon: molecule json loader: S-group #0 of molecule #0 has type 'MON', which is not a KET S-group type
+rejected-type-mon: loaded
 rejected-type-not-string: molecule json loader: S-group #0 of molecule #0 has no 'type' string
 rejected-atoms-missing: molecule json loader: S-group #0 of molecule #0 has no 'atoms' array
 rejected-atom-out-of-range: molecule json loader: S-group #0 of molecule #0 refers to atom 7, which the molecule does not have

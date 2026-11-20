@@ -286,7 +286,7 @@ gone:
 | SDF reaction export in `indigo_api.py` | superseded by `fragmentedSdf()`, which splits a reaction into molecules |
 | KET COM/MIX `subscript` | kept: upstream reads and writes `subscript` for SRU only |
 | KET `compno` | kept as a read alias; the saver writes upstream's `componentOrder` |
-| KET `MON` type | kept: upstream's `isKetSGroupType` in `ket_keys.h` refuses MON in the KET reader and writer |
+| KET `MON` type | kept: upstream's `isKetSGroupType` in `ket_keys.h` refuses MON in the KET reader and writer, so the fork ref of `formats/ket_polymer_sgroups` records `rejected-type-mon: loaded` |
 | bracket export, multi-string wrap, rg-label, gross formula, CIP, CDXML, abbreviation roles | reapplied unchanged |
 
 The ketcher fork reads `compno`. Until it moves to upstream 3.22, which reads `componentOrder`,
