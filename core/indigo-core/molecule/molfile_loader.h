@@ -19,6 +19,8 @@
 #ifndef __molfile_loader__
 #define __molfile_loader__
 
+#include <map>
+
 #include "base_cpp/array.h"
 #include "base_cpp/exception.h"
 #include "base_cpp/tlscont.h"
@@ -93,6 +95,8 @@ namespace indigo
         TL_CP_DECL(Array<int>, _stereo_care_bonds);
         TL_CP_DECL(Array<int>, _stereocenter_types);
         TL_CP_DECL(Array<int>, _stereocenter_groups);
+        // Atom block parity, consumed only when the file has no coordinates; wedges win otherwise.
+        TL_CP_DECL(Array<int>, _stereocenter_parities);
         TL_CP_DECL(Array<int>, _sensible_bond_directions);
         TL_CP_DECL(Array<int>, _ignore_cistrans);
 
@@ -123,20 +127,41 @@ namespace indigo
         bool _chiral;
         int _max_template_id;
         bool _disable_sgroups_conversion;
+        // The star of a haptic ENDPTS record -> the attachment group it stands for.
+        // One star is the centre of one pi-system, so records sharing a star share the
+        // group. The stars are removed once the whole molecule is read.
+        std::map<int, int> _haptic_star_groups;
         void _readHeader();
         void _readCtabHeader();
         void _readCtab2000();
+        int _readSGroupLine(const char* property, Array<char>& rest);
+        // An entry of a V2000 property line that lists S-groups with a value each, "nn8 sss vvv sss vvv ...".
+        struct SGroupLineEntry
+        {
+            int sgroup_idx;
+            char value[4]; // up to three characters, zero-terminated
+        };
+        void _readSGroupEntryLine(const char* property, std::vector<SGroupLineEntry>& entries);
+        void _checkSGroupIndex(const char* property, int sgroup_idx);
         void _convertCharge(int value, int& charge, int& radical);
         void _read3dFeature2000();
         void _readRGroups2000();
         void _readCtab3000();
         void _readSGroup3000(const char* str);
+        void _skipValue3000(Scanner& scanner);
         void _readRGroups3000();
         void _readTGroups3000();
         void _checkEndOfMolBlock3000();
         void _readSGroupDisplay(Scanner& scanner, DataSGroup& dsg);
+        // Give an S-group what a V2000 or V3000 property says about it. A value that is not understood - an
+        // unknown connectivity code, an order that is not positive - or that the S-group type does not carry
+        // is skipped and the molecule still loads.
+        static void _applyConnectivity(SGroup& sgroup, const char* connectivity_code);
+        static void _applyComponentOrder(SGroup& sgroup, int component_order);
         void _readCollectionBlock3000();
         void _readSGroupsBlock3000();
+        void _readEndpoints3000(Scanner& scanner, std::vector<int>& endpoints);
+        void _addHapticBond3000(int beg, int end, const std::vector<int>& endpoints, int type);
         void _preparePseudoAtomLabel(Array<char>& pseudo);
         void _readMultiString(Array<char>& str);
         void _readStringInQuotes(Scanner& scanner, Array<char>* str);
@@ -149,6 +174,7 @@ namespace indigo
 
         static int _asc_cmp_cb(int& v1, int& v2, void* context);
         void _postLoad();
+        void _buildStereocentersFromParity();
         bool _expandNucleotide(int nuc_atom_idx, int tg_idx, std::unordered_map<MonomerKey, int, pair_hash>& new_templates);
         int _insertTemplate(MonomersLib::value_type& nuc, std::unordered_map<MonomerKey, int, pair_hash>& new_templates);
 

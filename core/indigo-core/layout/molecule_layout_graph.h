@@ -21,9 +21,11 @@
 
 #include "base_cpp/cancellation_handler.h"
 #include "base_cpp/ptr_array.h"
+#include "base_cpp/ptr_reusable_pool.h"
 #include "base_cpp/tlscont.h"
 #include "graph/filter.h"
 #include "graph/graph.h"
+#include "layout/haptic_layout.h"
 #include "layout/layout_pattern_holder.h"
 #include "math/algebra.h"
 #include "molecule/molecule.h"
@@ -173,11 +175,19 @@ namespace indigo
         bool _flipped; // component was flipped after attaching
 
         int max_iterations;
-        LAYOUT_ORIENTATION layout_orientation;
+        // Default-initialized: a directly constructed layout graph (e.g.
+        // UnfoldAndLayoutHydrogens) must not read a garbage orientation in
+        // _refineCoordinates; MoleculeLayout assigns it explicitly.
+        LAYOUT_ORIENTATION layout_orientation = UNSPECIFIED;
 
         bool preserve_existing_layout;
         bool respect_cycles_direction;
         bool sequence_layout;
+
+        // Group-to-atom haptic bond length, in standard bond lengths
+        // (requirement 4 of #3233).
+        static constexpr float DEFAULT_HAPTIC_BOND_MULTIPLIER = 1.5f;
+        float haptic_bond_multiplier = DEFAULT_HAPTIC_BOND_MULTIPLIER;
 
         CancellationHandler* cancellation;
 
@@ -202,7 +212,7 @@ namespace indigo
         BaseMolecule* _molecule;
         const int* _molecule_edge_mapping;
 
-        struct Cycle
+        struct Cycle : public Reusable
         {
             explicit Cycle();
             explicit Cycle(const List<int>& edges, const MoleculeLayoutGraph& graph);
@@ -210,6 +220,22 @@ namespace indigo
 
             void copy(const List<int>& edges, const MoleculeLayoutGraph& graph);
             void copy(const Array<int>& vertices, const Array<int>& edges);
+
+            // Set up a pooled cycle exactly as the corresponding two-argument
+            // constructor would. The pool applies one of these on every add(),
+            // so a cycle is never handed out uninitialized.
+            void reuse(const List<int>& edges, const MoleculeLayoutGraph& graph);
+            void reuse(const Array<int>& vertices, const Array<int>& edges);
+
+            // Restores the default-constructed state; buffers are retained.
+            void reuse() override
+            {
+                _vertices.clear();
+                _edges.clear();
+                _attached_weight.clear();
+                _max_idx = 0;
+                _morgan_code_calculated = false;
+            }
 
             int vertexCount() const
             {
@@ -313,6 +339,7 @@ namespace indigo
         void getBoundingBox(Rect2f& bbox) const;
         void getBoundingBox(Vec2f& left_bottom, Vec2f& right_top) const;
         void copyCoordsFromComponent(MoleculeLayoutGraph& component, Vec2f shift = {0, 0});
+        void copyCoordsFromComponent(MoleculeLayoutGraph& component, const HapticLayout::Placement& placement, Vec2f shift);
 
         // for components
         virtual void _calcMorganCodes();
@@ -388,6 +415,13 @@ namespace indigo
         void _layoutMultipleComponents(BaseMolecule& molecule, bool respect_existing, const Filter* filter, float bond_length,
                                        std::optional<Vec2f> multiple_distance = std::nullopt);
         void _layoutSingleComponent(BaseMolecule& molecule, bool respect_existing, const Filter* filter, float bond_length);
+
+        // Clusters the components haptic bonds join, filling the placement of each
+        // and returning the cluster count; without such bonds every component is its
+        // own cluster with an identity placement.
+        int _planHapticLayout(BaseMolecule& molecule, PtrArray<MoleculeLayoutGraph>& components, float bond_length, Array<HapticLayout::Placement>& placement);
+
+        static void _placedBoundingBox(MoleculeLayoutGraph& component, const HapticLayout::Placement& placement, Rect2f& bbox);
 
     protected:
         virtual void _layout_component(BiconnectedDecomposer& bc_decom, PtrArray<MoleculeLayoutGraph>& bc_components, Array<int>& bc_tree,

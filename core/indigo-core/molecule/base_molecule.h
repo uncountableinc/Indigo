@@ -25,8 +25,10 @@
 
 #include "base_cpp/properties_map.h"
 #include "base_cpp/ptr_array.h"
+#include "base_cpp/ptr_reusable_pool.h"
 #include "base_cpp/red_black.h"
 #include "graph/graph.h"
+#include "graph/graph_decomposer.h"
 #include "math/algebra.h"
 #include "molecule/elements.h"
 #include "molecule/ket_annotation.h"
@@ -34,8 +36,10 @@
 #include "molecule/metadata_storage.h"
 #include "molecule/molecule_allene_stereo.h"
 #include "molecule/molecule_arom.h"
+#include "molecule/molecule_attachment_groups.h"
 #include "molecule/molecule_cip_calculator.h"
 #include "molecule/molecule_cis_trans.h"
+#include "molecule/molecule_haptic_bonds.h"
 #include "molecule/molecule_ionize.h"
 #include "molecule/molecule_rgroups.h"
 #include "molecule/molecule_sgroups.h"
@@ -79,7 +83,23 @@ namespace indigo
         _BOND_ANY = 8,
         _BOND_COORDINATION = 9,
         _BOND_HYDROGEN = 10,
+
+        // Internal bond kinds of Indigo, deliberately outside the range any file
+        // format uses so that a format code can never be taken for one and back.
+        // They are never stored as the order of a graph edge: a bond of this kind
+        // lives in MoleculeHapticBonds and is turned into the target format's own
+        // representation on saving (V3000: order 9 plus ENDPTS/ATTACH).
+        _BOND_HAPTIC = 1009,              // ATTACH=ALL, feature #3233
+        _BOND_VARIABLE_ATTACHMENT = 1010, // ATTACH=ANY, feature #3731
     };
+
+    // Bonds that contribute no shared electron pair to either atom and therefore must be
+    // excluded from every valence/connectivity calculation: coordination (dative) and
+    // hydrogen bonds. Kept in one place so all connectivity paths apply the same rule.
+    inline bool isNonValenceBond(int order)
+    {
+        return order == _BOND_COORDINATION || order == _BOND_HYDROGEN;
+    }
 
     enum
     {
@@ -102,7 +122,7 @@ namespace indigo
 
     enum LAYOUT_ORIENTATION
     {
-        UNCPECIFIED,
+        UNSPECIFIED,
         HORIZONTAL,
         VERTICAL
     };
@@ -111,7 +131,6 @@ namespace indigo
     // merging with molecule and cloning procedures
     enum
     {
-        SKIP_ALL = 0xFF,
         SKIP_CIS_TRANS = 0x01,
         SKIP_STEREOCENTERS = 0x02,
         SKIP_XYZ = 0x04,
@@ -122,6 +141,14 @@ namespace indigo
         // Skip copying ALL R-group data (fragments + attachment points on R-sites).
         // Use this when you want to populate R-groups manually afterwards.
         SKIP_RGROUPS = 0x80,
+        // Skip copying attachment groups; the haptic bonds that address them are
+        // skipped with them, since a bond without its group is meaningless.
+        SKIP_ATTACHMENT_GROUPS = 0x100,
+        SKIP_HAPTIC_BONDS = 0x200,
+        // Last on purpose: every flag above has to appear here, so a new one is added
+        // in the line right below itself rather than by recounting a hex literal.
+        SKIP_ALL = SKIP_CIS_TRANS | SKIP_STEREOCENTERS | SKIP_XYZ | SKIP_RGROUP_FRAGMENTS | SKIP_ATTACHMENT_POINTS | SKIP_TGROUPS |
+                   SKIP_TEMPLATE_ATTACHMENT_POINTS | SKIP_RGROUPS | SKIP_ATTACHMENT_GROUPS | SKIP_HAPTIC_BONDS,
     };
 
     class Molecule;
@@ -152,11 +179,21 @@ namespace indigo
             BaseMolecule& _mol;
         };
 
-        struct TemplateAttPoint // Monomer connection info
+        struct TemplateAttPoint : public Reusable // Monomer connection info
         {
-            int ap_occur_idx;  // Index of the attachment point occurrence
-            int ap_aidx;       // Molecule atom index of the connection
-            Array<char> ap_id; // Attachment point id
+            int ap_occur_idx = 0; // Index of the attachment point occurrence
+            int ap_aidx = 0;      // Molecule atom index of the connection
+            Array<char> ap_id;    // Attachment point id
+
+            // Non-destructive reset for PtrReusablePool reuse: restore the
+            // value-initialized state (zeroed indices, empty id), buffer
+            // retained.
+            void reuse() override
+            {
+                ap_occur_idx = 0;
+                ap_aidx = 0;
+                ap_id.clear();
+            }
         };
 
         BaseMolecule();
@@ -192,11 +229,19 @@ namespace indigo
         virtual QueryMolecule& asQueryMolecule();
         virtual bool isQueryMolecule();
 
+        // Empties the molecule completely, document-level state included, so a
+        // cleared object is indistinguishable from a fresh one. Graph::reuse()
+        // dispatches here, which is all a pooled slot needs.
         void clear() override;
         virtual void changed() override;
 
         // 'neu' means 'new' in German
         virtual BaseMolecule* neu() const = 0;
+
+        // Factory for a pool slot of the same dynamic type as `sample`. The maker
+        // calls sample.neu(), so it runs only when the pool has nothing of that
+        // type to recycle.
+        static PtrReusablePool<BaseMolecule>::Factory poolFactoryLike(const BaseMolecule& sample);
 
         virtual int getAtomNumber(int idx) = 0;      // > 0 -- ELEM_***, 0 -- pseudo-atom, -1 -- not sure
         virtual int getAtomCharge(int idx) = 0;      // charge or CHARGE_UNKNOWN if not sure
@@ -228,7 +273,7 @@ namespace indigo
             Array<char> ap_id;
         };
 
-        struct _TemplateOccurrence
+        struct _TemplateOccurrence : public Reusable
         {
             int name_idx;              // index in _template_names
             int class_idx;             // index in _template_classes
@@ -248,8 +293,35 @@ namespace indigo
                 seq_name.copy(other.seq_name);
                 order.copy(other.order);
             }
+
+            // Deep field copy, for a caller that clones an occurrence.
+            void reuse(const _TemplateOccurrence& other)
+            {
+                name_idx = other.name_idx;
+                class_idx = other.class_idx;
+                seq_id = other.seq_id;
+                template_idx = other.template_idx;
+                contracted = other.contracted;
+                transform = other.transform;
+                seq_name.copy(other.seq_name);
+                order.copy(other.order);
+            }
+
+            // Non-destructive reset for PtrReusablePool reuse: restore the
+            // default-constructed state.
+            void reuse() override
+            {
+                name_idx = -1;
+                class_idx = -1;
+                seq_id = -1;
+                template_idx = -1;
+                contracted = DisplayOption::Undefined;
+                seq_name.clear();
+                order.clear();
+                transform = Transformation();
+            }
         };
-        ObjPool<_TemplateOccurrence> _template_occurrences; // monomer info. each template atom contains index of it occurence in this array
+        PtrReusablePool<_TemplateOccurrence> _template_occurrences; // monomer occurrences; a template atom stores its occurrence index here
 
         StringPool _template_classes;
         StringPool _template_names;
@@ -404,6 +476,48 @@ namespace indigo
         virtual int addBond(int beg, int end, int order) = 0;
         virtual int addBond_Silent(int beg, int end, int order) = 0;
 
+        // The only way to create a haptic bond. Not virtual: the bond keeps the
+        // same shape in every subclass, and the validation below must not be
+        // lost by an override. `type` is an internal code, _BOND_HAPTIC or
+        // _BOND_VARIABLE_ATTACHMENT.
+        int addHapticBond(HapticBond::Endpoint begin, HapticBond::Endpoint end, int type = _BOND_HAPTIC);
+
+        // The only way to remove an attachment group: the haptic bonds that
+        // reference it must go with it, and the group container does not know
+        // about them.
+        void removeAttachmentGroup(int idx);
+
+        // Removing a haptic bond changes what holds the molecule together, so it
+        // goes through the molecule for the same reason adding one does.
+        void removeHapticBond(int idx);
+
+        // The only way to change what a group is made of once it has bonds: a
+        // member cannot also be the partner of a bond of its own group, and the
+        // group container cannot see the bonds to check that.
+        void setAttachmentGroupAtoms(int group_idx, const std::vector<int>& atoms);
+
+        // Centroid of the member atoms, where a haptic bond of the group starts;
+        // throws unless the group exists.
+        Vec3f attachmentGroupCentre(int group_idx);
+
+        // A haptic bond holds an atom without being an edge, so the graph shows fewer
+        // neighbours of it than the drawing does: a stereocentre on such an atom
+        // cannot be recognised and the sense of a wedge on it cannot be checked. Both
+        // loaders record what the file says instead of refusing the structure.
+        bool hasBondsOutsideTheGraph(int atom) const;
+
+        // Atom sets that hold together although no edge joins them: s-group
+        // members, query components and haptic bonds. Feeds
+        // Graph::countComponents(external_neighbors) — call it whenever a
+        // decomposition must not cut a molecule where it is still one whole. A split
+        // the user sees goes through moleculeComponents() instead.
+        void collectExternalNeighbors(std::list<std::unordered_set<int>>& neighbors);
+
+        // The components the public API reports: a haptic bond joins atoms as an edge
+        // does, an S-group does not. Numbered apart from Graph::getDecomposition(), and
+        // kept until connectivity changes - a reference to them does not outlive that.
+        const GraphDecomposer& moleculeComponents();
+
         void unfoldHydrogens(Array<int>* markers_out, int max_h_cnt = -1, bool impl_h_no_throw = false, bool only_selected = false);
         virtual void registerUnfoldedHydrogenQueryComponent(int /*atom_idx*/, int /*added_hydrogen*/){}; // QueryMolecule only
 
@@ -482,12 +596,16 @@ namespace indigo
             return _annotation;
         };
 
-        ObjPool<TemplateAttPoint> template_attachment_points; // All used APs -
-        PtrArray<ObjPool<int>> template_attachment_indexes;   //
+        PtrReusablePool<TemplateAttPoint> template_attachment_points; // all attachment points in use
+        PtrArray<ObjPool<int>> template_attachment_indexes;           // per-atom lists of indices into template_attachment_points
 
         MoleculeSGroups sgroups;
 
         MoleculeTGroups tgroups;
+
+        MoleculeAttachmentGroups attachment_groups;
+
+        MoleculeHapticBonds haptic_bonds;
 
         bool use_scsr_sgroups_only = false;
         bool remove_scsr_lgrp = false;
@@ -702,6 +820,10 @@ namespace indigo
         virtual void _removeAtoms(const Array<int>& indices, const int* mapping);
         virtual void _removeBonds(const Array<int>& indices);
 
+        // Throws unless the endpoint names something this molecule has.
+        void _checkHapticEndpoint(const HapticBond::Endpoint& endpoint);
+        void _hapticConnectivityChanged();
+
         int _addBaseAtom();
         int _addBaseBond(int beg, int end);
 
@@ -710,9 +832,8 @@ namespace indigo
         void _removeAtomsFromSuperatom(Superatom& sa, Array<int>& mapping);
         void _removeBondsFromSGroup(SGroup& sgroup, Array<int>& mapping);
         void _removeBondsFromSuperatom(Superatom& sa, Array<int>& mapping);
-        bool _mergeSGroupWithSubmolecule(SGroup& sgroup, SGroup& super, BaseMolecule& supermol, Array<int>& mapping, Array<int>& edge_mapping);
-
-        void _checkSgroupHierarchy(int pidx, int oidx);
+        bool _mergeSGroupWithSubmolecule(SGroup& sgroup, SGroup& super, BaseMolecule& supermol, Array<int>& mapping, Array<int>& edge_mapping,
+                                         bool goes_with_ancestor);
 
         int _transformTGroupToSGroup(int idx, int t_idx);
         int _transformSGroupToTGroup(int idx, int& tg_id);
@@ -765,6 +886,8 @@ namespace indigo
         // When molecule gets edited then edit revision is increased.
         // If edit revision is the same then molecule wasn't edited
         int _edit_revision;
+
+        std::unique_ptr<GraphDecomposer> _molecule_components;
 
         MetaDataStorage _meta;
 

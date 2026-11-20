@@ -162,6 +162,12 @@ class IndigoLib:
         IndigoLib.lib.indigoLoadMonomerLibraryFromString.argtypes = [c_char_p]
         IndigoLib.lib.indigoLoadMonomerLibraryFromFile.restype = c_int
         IndigoLib.lib.indigoLoadMonomerLibraryFromFile.argtypes = [c_char_p]
+        IndigoLib.lib.indigoLoadAbbreviationsFromString.restype = c_int
+        IndigoLib.lib.indigoLoadAbbreviationsFromString.argtypes = [c_char_p]
+        IndigoLib.lib.indigoLoadAbbreviationsFromFile.restype = c_int
+        IndigoLib.lib.indigoLoadAbbreviationsFromFile.argtypes = [c_char_p]
+        IndigoLib.lib.indigoResetAbbreviations.restype = c_int
+        IndigoLib.lib.indigoResetAbbreviations.argtypes = []
         IndigoLib.lib.indigoLoadKetDocumentFromString.restype = c_int
         IndigoLib.lib.indigoLoadKetDocumentFromString.argtypes = [c_char_p]
         IndigoLib.lib.indigoLoadKetDocumentFromFile.restype = c_int
@@ -680,6 +686,42 @@ class IndigoLib:
         ]
         IndigoLib.lib.indigoIterateSGroupCrossBonds.restype = c_int
         IndigoLib.lib.indigoIterateSGroupCrossBonds.argtypes = [c_int]
+        IndigoLib.lib.indigoAddAttachmentGroup.restype = c_int
+        IndigoLib.lib.indigoAddAttachmentGroup.argtypes = [
+            c_int,
+            c_int,
+            POINTER(c_int),
+        ]
+        IndigoLib.lib.indigoCountAttachmentGroups.restype = c_int
+        IndigoLib.lib.indigoCountAttachmentGroups.argtypes = [c_int]
+        IndigoLib.lib.indigoIterateAttachmentGroups.restype = c_int
+        IndigoLib.lib.indigoIterateAttachmentGroups.argtypes = [c_int]
+        IndigoLib.lib.indigoGetAttachmentGroup.restype = c_int
+        IndigoLib.lib.indigoGetAttachmentGroup.argtypes = [c_int, c_int]
+        IndigoLib.lib.indigoSetAttachmentGroupAtoms.restype = c_int
+        IndigoLib.lib.indigoSetAttachmentGroupAtoms.argtypes = [
+            c_int,
+            c_int,
+            POINTER(c_int),
+        ]
+        IndigoLib.lib.indigoGetAttachmentGroupAnchor.restype = c_int
+        IndigoLib.lib.indigoGetAttachmentGroupAnchor.argtypes = [c_int]
+        IndigoLib.lib.indigoIsAttachmentGroup.restype = c_int
+        IndigoLib.lib.indigoIsAttachmentGroup.argtypes = [c_int]
+        IndigoLib.lib.indigoAddHapticBond.restype = c_int
+        IndigoLib.lib.indigoAddHapticBond.argtypes = [c_int, c_int, c_int]
+        IndigoLib.lib.indigoCountHapticBonds.restype = c_int
+        IndigoLib.lib.indigoCountHapticBonds.argtypes = [c_int]
+        IndigoLib.lib.indigoIterateHapticBonds.restype = c_int
+        IndigoLib.lib.indigoIterateHapticBonds.argtypes = [c_int]
+        IndigoLib.lib.indigoGetHapticBond.restype = c_int
+        IndigoLib.lib.indigoGetHapticBond.argtypes = [c_int, c_int]
+        IndigoLib.lib.indigoGetHapticBondBegin.restype = c_int
+        IndigoLib.lib.indigoGetHapticBondBegin.argtypes = [c_int]
+        IndigoLib.lib.indigoGetHapticBondEnd.restype = c_int
+        IndigoLib.lib.indigoGetHapticBondEnd.argtypes = [c_int]
+        IndigoLib.lib.indigoHapticBondType.restype = c_char_p
+        IndigoLib.lib.indigoHapticBondType.argtypes = [c_int]
         IndigoLib.lib.indigoAddSGroupAttachmentPoint.restype = c_int
         IndigoLib.lib.indigoAddSGroupAttachmentPoint.argtypes = [
             c_int,
@@ -892,6 +934,10 @@ class IndigoLib:
         IndigoLib.lib.indigoIterateComponents.argtypes = [c_int]
         IndigoLib.lib.indigoComponent.restype = c_int
         IndigoLib.lib.indigoComponent.argtypes = [c_int, c_int]
+        IndigoLib.lib.indigoCheckSalt.restype = c_int
+        IndigoLib.lib.indigoCheckSalt.argtypes = [c_int]
+        IndigoLib.lib.indigoStripSalt.restype = c_int
+        IndigoLib.lib.indigoStripSalt.argtypes = [c_int]
         IndigoLib.lib.indigoCountSSSR.restype = c_int
         IndigoLib.lib.indigoCountSSSR.argtypes = [c_int]
         IndigoLib.lib.indigoIterateSSSR.restype = c_int
@@ -1112,6 +1158,8 @@ class IndigoLib:
         IndigoLib.lib.indigoTell.argtypes = [c_int]
         IndigoLib.lib.indigoSdfAppend.restype = c_int
         IndigoLib.lib.indigoSdfAppend.argtypes = [c_int, c_int]
+        IndigoLib.lib.indigoFragmentedSdf.restype = c_char_p
+        IndigoLib.lib.indigoFragmentedSdf.argtypes = [c_int]
         IndigoLib.lib.indigoSmilesAppend.restype = c_int
         IndigoLib.lib.indigoSmilesAppend.argtypes = [c_int, c_int]
         IndigoLib.lib.indigoRdfHeader.restype = c_int

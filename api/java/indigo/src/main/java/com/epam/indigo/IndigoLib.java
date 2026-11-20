@@ -141,6 +141,14 @@ public interface IndigoLib extends Library {
 
     int indigoLoadMonomerLibraryFromFile(String filename);
 
+    int indigoLoadAbbreviations(int source);
+
+    int indigoLoadAbbreviationsFromString(String str);
+
+    int indigoLoadAbbreviationsFromFile(String filename);
+
+    int indigoResetAbbreviations();
+
     int indigoLoadKetDocument(int source);
 
     int indigoLoadKetDocumentFromString(String str);
@@ -222,6 +230,8 @@ public interface IndigoLib extends Library {
     Pointer indigoCml(int object);
 
     Pointer indigoJson(int object);
+
+    Pointer indigoFragmentedSdf(int item);
 
     Pointer indigoMonomerLibrary(int object);
 
@@ -506,6 +516,35 @@ public interface IndigoLib extends Library {
 
     int indigoIterateSGroupCrossBonds(int sgroup);
 
+    // Issue #3842: haptic bonds (#3233)
+    int indigoAddAttachmentGroup(int molecule, int natoms, int[] atoms);
+
+    int indigoCountAttachmentGroups(int molecule);
+
+    int indigoIterateAttachmentGroups(int molecule);
+
+    int indigoGetAttachmentGroup(int molecule, int index);
+
+    int indigoSetAttachmentGroupAtoms(int group, int natoms, int[] atoms);
+
+    int indigoGetAttachmentGroupAnchor(int group);
+
+    int indigoIsAttachmentGroup(int item);
+
+    int indigoAddHapticBond(int molecule, int begin, int end);
+
+    int indigoCountHapticBonds(int molecule);
+
+    int indigoIterateHapticBonds(int molecule);
+
+    int indigoGetHapticBond(int molecule, int index);
+
+    int indigoGetHapticBondBegin(int bond);
+
+    int indigoGetHapticBondEnd(int bond);
+
+    Pointer indigoHapticBondType(int bond);
+
     int indigoAddSGroupAttachmentPoint(int sgroup, int aidx, int lvidx, String apid);
 
     int indigoDeleteSGroupAttachmentPoint(int sgroup, int apidx);
@@ -731,6 +770,10 @@ public interface IndigoLib extends Library {
     int indigoIterateComponents(int molecule);
 
     int indigoComponent(int molecule, int index);
+
+    int indigoCheckSalt(int molecule);
+
+    int indigoStripSalt(int molecule);
 
     int indigoCountSSSR(int molecule);
 

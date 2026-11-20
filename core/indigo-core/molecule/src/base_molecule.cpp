@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "base_cpp/crc32.h"
@@ -51,6 +52,12 @@ BaseMolecule::BaseMolecule() : original_format(BaseMolecule::UNKNOWN), _edit_rev
 {
 }
 
+PtrReusablePool<BaseMolecule>::Factory BaseMolecule::poolFactoryLike(const BaseMolecule& sample)
+{
+    return {std::type_index(typeid(sample)), [](void* context) { return std::unique_ptr<BaseMolecule>(static_cast<const BaseMolecule*>(context)->neu()); },
+            const_cast<void*>(static_cast<const void*>(&sample))};
+}
+
 BaseMolecule::~BaseMolecule()
 {
 }
@@ -72,6 +79,8 @@ bool BaseMolecule::isQueryMolecule()
 
 void BaseMolecule::changed()
 {
+    _molecule_components.reset();
+
     // #2851: when adding atoms to the molecule, we should keep existing cip labels
     // if (have_cip)
     //     clearCIP();
@@ -91,6 +100,8 @@ void BaseMolecule::clear()
     _attachment_index.clear();
     sgroups.clear();
     tgroups.clear();
+    attachment_groups.clear();
+    haptic_bonds.clear();
     template_attachment_points.clear();
     template_attachment_indexes.clear();
     _template_occurrences.clear();
@@ -117,6 +128,18 @@ void BaseMolecule::clear()
     _meta.resetMetaData();
     clearCIP();
     aliases.clear();
+
+    // Document-level state. Cleared here and not left to the caller, so an
+    // emptied molecule carries nothing from its previous contents: clone()
+    // appends to monomer_shapes and merges properties/annotations by source
+    // key, so leftovers would accumulate in any object that is cleared and
+    // repopulated (loaders, clone destinations, pooled slots).
+    _properties.clear();
+    monomer_shapes.clear();
+    _atom_annotations.clear();
+    _bond_annotations.clear();
+    _annotation.reset();
+    original_format = UNKNOWN;
 }
 
 bool BaseMolecule::hasCoord(BaseMolecule& mol)
@@ -165,26 +188,46 @@ void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& ma
     mergeSGroupsWithSubmolecule(mol, mapping, edge_mapping);
 }
 
+// A group without atoms of its own goes with its parent: true when it has no atoms and an atom of one of its ancestors is
+// mapped. A group with atoms goes with its atoms only. A malformed hierarchy can be cyclic, and no chain is longer than
+// the number of groups.
+static bool goesWithAncestor(MoleculeSGroups& sgroups, const std::vector<int>& parents, int idx, const Array<int>& mapping)
+{
+    if (sgroups.getSGroup(idx).atoms.size() > 0)
+        return false;
+    int steps = sgroups.getSGroupCount();
+    for (int parent = parents[idx]; parent >= 0 && steps > 0; parent = parents[parent], --steps)
+    {
+        for (int atom : sgroups.getSGroup(parent).atoms)
+        {
+            if (mapping[atom] >= 0)
+                return true;
+        }
+    }
+    return false;
+}
+
 void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& mapping, Array<int>& edge_mapping)
 {
-    int i;
-    std::map<int, int> old_idx_to_new;
+    // Parents are resolved in the source, before the copies take their own pool positions
+    const std::vector<int> source_parents = mol.sgroups.resolveParents();
+    std::unordered_map<int, int> copy_of_source;
 
-    for (i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
+    for (int i = mol.sgroups.begin(); i != mol.sgroups.end(); i = mol.sgroups.next(i))
     {
         SGroup& supersg = mol.sgroups.getSGroup(i);
         int idx = sgroups.addSGroup(supersg.sgroup_type);
         SGroup& sg = sgroups.getSGroup(idx);
-        sg.parent_idx = supersg.parent_idx;
         sg.index = supersg.index;
         sg.ext_index = supersg.ext_index;
         sg.parent_group = supersg.parent_group;
         sg.label.copy(supersg.label);
+        sg.connectivity = supersg.connectivity;
+        sg.component_order = supersg.component_order;
 
-        if (_mergeSGroupWithSubmolecule(sg, supersg, mol, mapping, edge_mapping))
+        if (_mergeSGroupWithSubmolecule(sg, supersg, mol, mapping, edge_mapping, goesWithAncestor(mol.sgroups, source_parents, i, mapping)))
         {
-            if (idx != i)
-                old_idx_to_new.emplace(i, idx);
+            copy_of_source.emplace(i, idx);
 
             if (sg.sgroup_type == SGroup::SG_TYPE_DAT)
             {
@@ -248,13 +291,6 @@ void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& ma
                 }
                 sa.display_position = supersa.display_position;
             }
-            else if (sg.sgroup_type == SGroup::SG_TYPE_SRU)
-            {
-                RepeatingUnit& ru = (RepeatingUnit&)sg;
-                RepeatingUnit& superru = (RepeatingUnit&)supersg;
-
-                ru.connectivity = superru.connectivity;
-            }
             else if (sg.sgroup_type == SGroup::SG_TYPE_MUL)
             {
                 MultipleGroup& mg = (MultipleGroup&)sg;
@@ -265,13 +301,6 @@ void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& ma
                     if (mapping[supermg.parent_atoms[j]] >= 0)
                         mg.parent_atoms.push(mapping[supermg.parent_atoms[j]]);
             }
-            else if (sg.sgroup_type == SGroup::SG_TYPE_COM)
-            {
-                ComponentGroup& cg = (ComponentGroup&)sg;
-                ComponentGroup& supercg = (ComponentGroup&)supersg;
-
-                cg.component_count = supercg.component_count;
-            }
         }
         else
         {
@@ -279,20 +308,11 @@ void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& ma
         }
     }
 
-    // Update parent_idx
-    if (sgroups.getSGroupCount() < mol.sgroups.getSGroupCount())
+    for (const auto& [source_idx, copy_idx] : copy_of_source)
     {
-        for (i = sgroups.begin(); i != sgroups.end(); i = sgroups.next(i))
-        {
-            SGroup& sgroup = sgroups.getSGroup(i);
-            const int parent_idx = sgroup.parent_idx.value_or(-1);
-            if (parent_idx < 0)
-                continue;
-
-            const auto it = old_idx_to_new.find(parent_idx);
-            if (it != old_idx_to_new.end())
-                sgroup.parent_idx = it->second;
-        }
+        // A parent left behind is no parent, and a link by number left as it was would name a group of this molecule
+        const auto parent_copy = copy_of_source.find(source_parents[source_idx]);
+        sgroups.setParent(copy_idx, parent_copy != copy_of_source.end() ? parent_copy->second : -1);
     }
 }
 
@@ -462,6 +482,21 @@ void BaseMolecule::_mergeWithSubmolecule_Sub(BaseMolecule& mol, const Array<int>
 
     // SGroups merging
     mergeSGroupsWithSubmolecule(mol, mapping, edge_mapping);
+
+    // attachment groups and the haptic bonds that address them by index
+    QS_DEF(Array<int>, group_mapping);
+    if (!(skip_flags & SKIP_ATTACHMENT_GROUPS))
+        attachment_groups.mergeWithSubmolecule(mol.attachment_groups, mapping, group_mapping);
+    else
+    {
+        // No group survives, so the bonds that address one go with them - while an
+        // atom-to-atom bond, which has no group at all, is none of that flag's business.
+        group_mapping.clear_resize(mol.attachment_groups.end());
+        group_mapping.fffill();
+    }
+
+    if (!(skip_flags & SKIP_HAPTIC_BONDS))
+        haptic_bonds.mergeWithSubmolecule(mol.haptic_bonds, mapping, group_mapping);
 
     // highlighting
     highlightSubmolecule(mol, mapping.ptr(), false);
@@ -756,6 +791,22 @@ int BaseMolecule::flipBondWithDirection(int atom_parent, int atom_from, int atom
         VertexEdge& ve_new = v_new.neighbors_list[item_new];
         ve_new.e = edge_idx;
         ve_new.v = pivot;
+
+        // The edge is rewired past the mutators of Graph, which are what calls changed().
+        changed();
+    };
+
+    // A stereocenter that already has four explicit neighbors has no free slot for the
+    // atom the flip attaches. The slot it must take is the one still held by the bond
+    // that is dropped right after the flip, so that bond has to go first: its removal
+    // frees exactly that slot and keeps the pyramid parity. When a free slot is there
+    // (implicit hydrogen), the original order is kept - removing the bond first would
+    // drop the stereocenter altogether.
+    auto pyramidIsFull = [&](int atom_idx) {
+        if (!stereocenters.exists(atom_idx))
+            return false;
+        const int* pyramid = stereocenters.getPyramid(atom_idx);
+        return pyramid != nullptr && pyramid[3] != -1;
     };
 
     // Selection Logic:
@@ -766,10 +817,17 @@ int BaseMolecule::flipBondWithDirection(int atom_parent, int atom_from, int atom
         // Method 2: Keep Leaving Bond (AttA-L)
         // We preserve the bond (AttA-L) and move its endpoint L -> B.
         // Result: Bond (AttA, B) using the 'Leaving' edge object.
+
+        // Here B gains AttA and loses A, so B is the center that needs a free slot.
+        bool conflicting_removed = pyramidIsFull(atom_parent);
+        if (conflicting_removed)
+            removeBond(bond_AB_idx);
+
         inplaceFlipBond(atom_to, leaving_atom, atom_parent);
 
         // Remove the conflicting A-B bond.
-        removeBond(bond_AB_idx);
+        if (!conflicting_removed)
+            removeBond(bond_AB_idx);
 
         final_dir = dir_AttAL;
         kept_bond_idx = findEdgeIndex(atom_to, atom_parent);
@@ -786,7 +844,16 @@ int BaseMolecule::flipBondWithDirection(int atom_parent, int atom_from, int atom
         if (bond_AB_idx >= 0)
             bond_ends_at_atom_from = (_edges[bond_AB_idx].end == atom_from);
 
+        // Here AttA gains B and loses L, so AttA is the center that needs a free slot.
+        bool leaving_removed = bond_AttAL_idx >= 0 && pyramidIsFull(atom_to);
+        if (leaving_removed)
+            removeBond(bond_AttAL_idx);
+
         inplaceFlipBond(atom_parent, atom_from, atom_to);
+
+        // Remove the unused AttA-L bond.
+        if (bond_AttAL_idx >= 0 && !leaving_removed)
+            removeBond(bond_AttAL_idx);
 
         final_dir = dir_AB;
 
@@ -799,10 +866,6 @@ int BaseMolecule::flipBondWithDirection(int atom_parent, int atom_from, int atom
             if (bond_ends_at_atom_from)
                 final_dir = BOND_DIRECTION_MONO;
         }
-
-        // Remove the unused AttA-L bond.
-        if (bond_AttAL_idx >= 0)
-            removeBond(bond_AttAL_idx);
 
         kept_bond_idx = findEdgeIndex(atom_parent, atom_to);
     }
@@ -868,7 +931,9 @@ void BaseMolecule::clone(BaseMolecule& other, Array<int>* mapping, Array<int>* i
     for (int i = 0; i < other.monomer_shapes.size(); ++i)
         monomer_shapes.add(new KetMonomerShape(other.monomer_shapes[i]));
     for (int i = 0; i < other._template_occurrences.size(); ++i)
-        std::ignore = _template_occurrences.add(other._template_occurrences[i]);
+    {
+        _template_occurrences.add(other._template_occurrences[i]);
+    }
     for (int i = 0; i < other._template_names.size(); ++i)
         _template_names.add(other._template_names.at(i));
     for (int i = 0; i < other._template_classes.size(); ++i)
@@ -914,7 +979,9 @@ void BaseMolecule::clone_KeepIndices(BaseMolecule& other, int skip_flags)
     for (int j = 0; j < other.monomer_shapes.size(); ++j)
         monomer_shapes.add(new KetMonomerShape(other.monomer_shapes[j]));
     for (i = 0; i < other._template_occurrences.size(); ++i)
-        std::ignore = _template_occurrences.add(other._template_occurrences[i]);
+    {
+        _template_occurrences.add(other._template_occurrences[i]);
+    }
     for (i = 0; i < other._template_names.size(); ++i)
         _template_names.add(other._template_names.at(i));
     for (i = 0; i < other._template_classes.size(); ++i)
@@ -965,6 +1032,14 @@ void BaseMolecule::removeAtoms(const Array<int>& indices)
         if (sg.atoms.size() < 1)
             removeSGroup(j);
     }
+
+    // haptic bonds and attachment groups, in this order: a bond addresses atoms
+    // directly, and the groups dropped below take their bonds with them
+    haptic_bonds.onAtomsRemoved(mapping);
+    QS_DEF(Array<int>, removed_groups);
+    attachment_groups.onAtomsRemoved(mapping, removed_groups);
+    for (i = 0; i < removed_groups.size(); i++)
+        haptic_bonds.onGroupRemoved(removed_groups[i]);
 
     // stereo
     removeAtomsStereocenters(indices);
@@ -1070,20 +1145,166 @@ void BaseMolecule::removeBond(int idx)
     removeBonds(edges);
 }
 
+void BaseMolecule::_checkHapticEndpoint(const HapticBond::Endpoint& endpoint)
+{
+    if (endpoint.isGroup())
+    {
+        if (!attachment_groups.hasGroup(endpoint.index()))
+            throw Error("haptic bond refers to a non-existent attachment group %d", endpoint.index());
+
+        const auto& atoms = attachment_groups.group(endpoint.index()).atoms();
+        if (atoms.empty())
+            throw Error("haptic bond refers to an empty attachment group %d", endpoint.index());
+
+        // The group takes any int as a member, and this is the only place where it
+        // meets the molecule: an index nobody owns would reach the connectivity sets
+        // and every consumer of them.
+        for (int atom : atoms)
+        {
+            if (!hasVertex(atom))
+                throw Error("attachment group %d holds a non-existent atom %d", endpoint.index(), atom);
+            if (isTemplateAtom(atom))
+                throw Error("attachment group %d holds template atom %d", endpoint.index(), atom);
+        }
+    }
+    else if (!hasVertex(endpoint.index()))
+        throw Error("haptic bond refers to a non-existent atom %d", endpoint.index());
+    // A template atom stands for a whole monomer and is written as a node of its
+    // own, so no format has a way to address it as one end of a haptic bond.
+    else if (isTemplateAtom(endpoint.index()))
+        throw Error("a haptic bond cannot reach template atom %d", endpoint.index());
+}
+
+// A haptic bond holds atoms together without an edge, so the graph, which drops what
+// it derived from connectivity on its own, does not notice when one changes.
+void BaseMolecule::_hapticConnectivityChanged()
+{
+    invalidateComponents();
+    changed();
+    updateEditRevision();
+}
+
+int BaseMolecule::addHapticBond(HapticBond::Endpoint begin, HapticBond::Endpoint end, int type)
+{
+    if (type != _BOND_HAPTIC && type != _BOND_VARIABLE_ATTACHMENT)
+        throw Error("unknown haptic bond type %d", type);
+
+    if (begin.isGroup() && end.isGroup())
+        throw Error("a haptic bond between two attachment groups is not allowed");
+
+    _checkHapticEndpoint(begin);
+    _checkHapticEndpoint(end);
+
+    if (begin.isGroup() || end.isGroup())
+    {
+        const HapticBond::Endpoint& group = begin.isGroup() ? begin : end;
+        const HapticBond::Endpoint& atom = begin.isGroup() ? end : begin;
+        if (attachment_groups.group(group.index()).hasAtom(atom.index()))
+            throw Error("atom %d is a member of the attachment group it would be bonded to", atom.index());
+    }
+    else if (begin.index() == end.index())
+        throw Error("a haptic bond needs two different atoms");
+
+    const int idx = haptic_bonds.add(begin, end, type);
+    _hapticConnectivityChanged();
+    return idx;
+}
+
+void BaseMolecule::removeAttachmentGroup(int idx)
+{
+    attachment_groups.removeGroup(idx);
+    haptic_bonds.onGroupRemoved(idx);
+    _hapticConnectivityChanged();
+}
+
+void BaseMolecule::setAttachmentGroupAtoms(int group_idx, const std::vector<int>& atoms)
+{
+    AttachmentGroup& group = attachment_groups.group(group_idx);
+
+    for (int i = haptic_bonds.begin(); i != haptic_bonds.end(); i = haptic_bonds.next(i))
+    {
+        const HapticBond& bond = haptic_bonds.at(i);
+        if (!bond.referencesGroup(group_idx))
+            continue;
+
+        const bool begin_is_this_group = bond.begin().isGroup() && bond.begin().index() == group_idx;
+        const HapticBond::Endpoint& partner = begin_is_this_group ? bond.end() : bond.begin();
+        if (partner.isGroup())
+            continue;
+
+        for (int atom : atoms)
+            if (atom == partner.index())
+                throw Error("atom %d is bonded to the attachment group it would join", atom);
+    }
+
+    group.setAtoms(atoms);
+    _hapticConnectivityChanged();
+}
+
+void BaseMolecule::removeHapticBond(int idx)
+{
+    haptic_bonds.remove(idx);
+    _hapticConnectivityChanged();
+}
+
+bool BaseMolecule::hasBondsOutsideTheGraph(int atom) const
+{
+    return haptic_bonds.referencesAtom(atom);
+}
+
+Vec3f BaseMolecule::attachmentGroupCentre(int group_idx)
+{
+    const std::vector<int>& atoms = attachment_groups.group(group_idx).atoms();
+
+    std::vector<Vec3f> positions;
+    positions.reserve(atoms.size());
+    for (int atom : atoms)
+        positions.push_back(getAtomXyz(atom));
+
+    return AttachmentGroup::centreOf(positions);
+}
+
+void BaseMolecule::collectExternalNeighbors(std::list<std::unordered_set<int>>& neighbors)
+{
+    for (int i = sgroups.begin(); i != sgroups.end(); i = sgroups.next(i))
+    {
+        SGroup& sgroup = sgroups.getSGroup(i);
+        neighbors.push_back({});
+        auto& sg_set = neighbors.back();
+        for (auto atom_idx : sgroup.atoms)
+            sg_set.insert(atom_idx);
+    }
+
+    if (isQueryMolecule())
+        asQueryMolecule().getComponentNeighbors(neighbors);
+
+    haptic_bonds.collectConnectivitySets(attachment_groups, neighbors);
+}
+
+const GraphDecomposer& BaseMolecule::moleculeComponents()
+{
+    if (_molecule_components == nullptr)
+    {
+        std::list<std::unordered_set<int>> haptic_sets;
+        haptic_bonds.collectConnectivitySets(attachment_groups, haptic_sets);
+
+        auto decomposer = std::make_unique<GraphDecomposer>(*this);
+        decomposer->decompose(nullptr, nullptr, &haptic_sets);
+        _molecule_components = std::move(decomposer);
+    }
+    return *_molecule_components;
+}
+
 void BaseMolecule::removeSGroup(int idx)
 {
-    SGroup& sg = sgroups.getSGroup(idx);
-    _checkSgroupHierarchy(sg.parent_group.value_or(0), sg.index);
-
-    sgroups.remove(idx);
+    sgroups.removeMovingChildrenToGrandparent(idx);
 }
 
 void BaseMolecule::removeSGroupWithBasis(int idx)
 {
     QS_DEF(Array<int>, sg_atoms);
-    SGroup& sg = sgroups.getSGroup(idx);
-    _checkSgroupHierarchy(sg.parent_group.value_or(0), sg.index);
-    sg_atoms.copy(sg.atoms);
+    sgroups.moveChildrenToGrandparent(idx);
+    sg_atoms.copy(sgroups.getSGroup(idx).atoms);
     removeAtoms(sg_atoms);
 }
 
@@ -1314,7 +1535,7 @@ void BaseMolecule::removeUnusedRGroups()
             auto& rg = rgroups.getRGroup(rg_idx);
             for (int f = rg.fragments.begin(); f != rg.fragments.end(); f = rg.fragments.next(f))
             {
-                BaseMolecule& frag = *rg.fragments[f];
+                BaseMolecule& frag = rg.fragments[f];
                 for (int k = frag.vertexBegin(); k < frag.vertexEnd(); k = frag.vertexNext(k))
                 {
                     if (frag.isRSite(k))

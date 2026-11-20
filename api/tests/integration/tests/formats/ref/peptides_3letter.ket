@@ -441,7 +441,6 @@
     "monomer0": {
         "type": "monomer",
         "id": "0",
-        "seqid": 1,
         "position": {
             "x": 0.000000,
             "y": -0.000000
@@ -452,7 +451,6 @@
     "monomer1": {
         "type": "monomer",
         "id": "1",
-        "seqid": 2,
         "position": {
             "x": 1.500000,
             "y": -0.000000
@@ -463,7 +461,6 @@
     "monomer2": {
         "type": "monomer",
         "id": "2",
-        "seqid": 3,
         "position": {
             "x": 3.000000,
             "y": -0.000000
@@ -474,7 +471,6 @@
     "monomer3": {
         "type": "monomer",
         "id": "3",
-        "seqid": 4,
         "position": {
             "x": 4.500000,
             "y": -0.000000
@@ -485,7 +481,6 @@
     "monomer4": {
         "type": "monomer",
         "id": "4",
-        "seqid": 5,
         "position": {
             "x": 6.000000,
             "y": -0.000000
@@ -496,7 +491,6 @@
     "monomer5": {
         "type": "monomer",
         "id": "5",
-        "seqid": 6,
         "position": {
             "x": 7.500000,
             "y": -0.000000
@@ -507,7 +501,6 @@
     "monomer6": {
         "type": "monomer",
         "id": "6",
-        "seqid": 7,
         "position": {
             "x": 9.000000,
             "y": -0.000000
@@ -518,7 +511,6 @@
     "monomer7": {
         "type": "monomer",
         "id": "7",
-        "seqid": 8,
         "position": {
             "x": 10.500000,
             "y": -0.000000
@@ -529,7 +521,6 @@
     "monomer8": {
         "type": "monomer",
         "id": "8",
-        "seqid": 9,
         "position": {
             "x": 12.000000,
             "y": -0.000000
@@ -540,7 +531,6 @@
     "monomer9": {
         "type": "monomer",
         "id": "9",
-        "seqid": 10,
         "position": {
             "x": 13.500000,
             "y": -0.000000
@@ -551,7 +541,6 @@
     "monomer10": {
         "type": "monomer",
         "id": "10",
-        "seqid": 11,
         "position": {
             "x": 15.000000,
             "y": -0.000000
@@ -562,7 +551,6 @@
     "monomer11": {
         "type": "monomer",
         "id": "11",
-        "seqid": 12,
         "position": {
             "x": 16.500000,
             "y": -0.000000
@@ -573,7 +561,6 @@
     "monomer12": {
         "type": "monomer",
         "id": "12",
-        "seqid": 13,
         "position": {
             "x": 18.000000,
             "y": -0.000000
@@ -584,7 +571,6 @@
     "monomer13": {
         "type": "monomer",
         "id": "13",
-        "seqid": 14,
         "position": {
             "x": 19.500000,
             "y": -0.000000
@@ -595,7 +581,6 @@
     "monomer14": {
         "type": "monomer",
         "id": "14",
-        "seqid": 15,
         "position": {
             "x": 21.000000,
             "y": -0.000000
@@ -606,7 +591,6 @@
     "monomer15": {
         "type": "monomer",
         "id": "15",
-        "seqid": 16,
         "position": {
             "x": 22.500000,
             "y": -0.000000
@@ -617,7 +601,6 @@
     "monomer16": {
         "type": "monomer",
         "id": "16",
-        "seqid": 17,
         "position": {
             "x": 24.000000,
             "y": -0.000000
@@ -628,7 +611,6 @@
     "monomer17": {
         "type": "monomer",
         "id": "17",
-        "seqid": 18,
         "position": {
             "x": 25.500000,
             "y": -0.000000
@@ -639,7 +621,6 @@
     "monomer18": {
         "type": "monomer",
         "id": "18",
-        "seqid": 19,
         "position": {
             "x": 27.000000,
             "y": -0.000000
@@ -650,7 +631,6 @@
     "monomer19": {
         "type": "monomer",
         "id": "19",
-        "seqid": 20,
         "position": {
             "x": 28.500000,
             "y": -0.000000
@@ -661,7 +641,6 @@
     "monomer20": {
         "type": "monomer",
         "id": "20",
-        "seqid": 21,
         "position": {
             "x": 30.000000,
             "y": -0.000000
@@ -672,7 +651,6 @@
     "monomer21": {
         "type": "monomer",
         "id": "21",
-        "seqid": 22,
         "position": {
             "x": 31.500000,
             "y": -0.000000
@@ -687,7 +665,6 @@
             "x": 33.000000,
             "y": -0.000000
         },
-        "seqid": 23,
         "alias": "B",
         "templateId": "B"
     },
@@ -698,7 +675,6 @@
             "x": 34.500000,
             "y": -0.000000
         },
-        "seqid": 24,
         "alias": "J",
         "templateId": "J"
     },
@@ -709,7 +685,6 @@
             "x": 36.000000,
             "y": -0.000000
         },
-        "seqid": 25,
         "alias": "X",
         "templateId": "X"
     },
@@ -720,7 +695,6 @@
             "x": 37.500000,
             "y": -0.000000
         },
-        "seqid": 26,
         "alias": "Z",
         "templateId": "Z"
     },
@@ -733,6 +707,7 @@
         "alias": "A",
         "naturalAnalogShort": "A",
         "aliasHELM": "A",
+        "aliasBILN": "A",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -867,6 +842,7 @@
         "alias": "R",
         "naturalAnalogShort": "R",
         "aliasHELM": "R",
+        "aliasBILN": "R",
         "attachmentPoints": [
             {
                 "attachmentAtom": 4,
@@ -1115,6 +1091,7 @@
         "alias": "N",
         "naturalAnalogShort": "N",
         "aliasHELM": "N",
+        "aliasBILN": "N",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1318,6 +1295,7 @@
         "alias": "D",
         "naturalAnalogShort": "D",
         "aliasHELM": "D",
+        "aliasBILN": "D",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1338,11 +1316,11 @@
                 }
             },
             {
-                "attachmentAtom": 8,
+                "attachmentAtom": 7,
                 "type": "side",
                 "leavingGroup": {
                     "atoms": [
-                        9
+                        8
                     ]
                 }
             }
@@ -1352,7 +1330,7 @@
                 "label": "N",
                 "location": [
                     -0.866000,
-                    -1.250000,
+                    -1.000000,
                     0.000000
                 ]
             },
@@ -1360,7 +1338,7 @@
                 "label": "C",
                 "location": [
                     0.000000,
-                    -0.750000,
+                    -0.500000,
                     0.000000
                 ],
                 "stereoLabel": "abs"
@@ -1369,7 +1347,7 @@
                 "label": "H",
                 "location": [
                     -1.732000,
-                    -0.750000,
+                    -0.500000,
                     0.000000
                 ]
             },
@@ -1377,7 +1355,7 @@
                 "label": "C",
                 "location": [
                     0.866000,
-                    -1.250000,
+                    -1.000000,
                     0.000000
                 ]
             },
@@ -1385,7 +1363,7 @@
                 "label": "O",
                 "location": [
                     1.732000,
-                    -0.750000,
+                    -0.500000,
                     0.000000
                 ]
             },
@@ -1393,7 +1371,7 @@
                 "label": "O",
                 "location": [
                     0.866000,
-                    -2.250000,
+                    -2.000000,
                     0.000000
                 ]
             },
@@ -1401,7 +1379,7 @@
                 "label": "C",
                 "location": [
                     0.000000,
-                    0.250000,
+                    0.500000,
                     0.000000
                 ]
             },
@@ -1409,7 +1387,7 @@
                 "label": "C",
                 "location": [
                     -0.866000,
-                    0.750000,
+                    1.000000,
                     0.000000
                 ]
             },
@@ -1417,15 +1395,7 @@
                 "label": "O",
                 "location": [
                     -0.866000,
-                    1.750000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "H",
-                "location": [
-                    0.000000,
-                    2.250000,
+                    2.000000,
                     0.000000
                 ]
             },
@@ -1433,7 +1403,7 @@
                 "label": "O",
                 "location": [
                     -1.732000,
-                    0.250000,
+                    0.500000,
                     0.000000
                 ]
             }
@@ -1497,17 +1467,10 @@
                 ]
             },
             {
-                "type": 1,
-                "atoms": [
-                    8,
-                    9
-                ]
-            },
-            {
                 "type": 2,
                 "atoms": [
                     7,
-                    10
+                    9
                 ]
             }
         ]
@@ -1521,6 +1484,7 @@
         "alias": "C",
         "naturalAnalogShort": "C",
         "aliasHELM": "C",
+        "aliasBILN": "C",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1694,6 +1658,7 @@
         "alias": "Q",
         "naturalAnalogShort": "Q",
         "aliasHELM": "Q",
+        "aliasBILN": "Q",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1912,6 +1877,7 @@
         "alias": "E",
         "naturalAnalogShort": "E",
         "aliasHELM": "E",
+        "aliasBILN": "E",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1932,11 +1898,11 @@
                 }
             },
             {
-                "attachmentAtom": 9,
+                "attachmentAtom": 8,
                 "type": "side",
                 "leavingGroup": {
                     "atoms": [
-                        11
+                        9
                     ]
                 }
             }
@@ -1946,7 +1912,7 @@
                 "label": "N",
                 "location": [
                     -0.866000,
-                    -1.750000,
+                    -1.250000,
                     0.000000
                 ]
             },
@@ -1954,7 +1920,7 @@
                 "label": "C",
                 "location": [
                     0.000000,
-                    -1.250000,
+                    -0.750000,
                     0.000000
                 ],
                 "stereoLabel": "abs"
@@ -1963,7 +1929,7 @@
                 "label": "H",
                 "location": [
                     -1.732000,
-                    -1.250000,
+                    -0.750000,
                     0.000000
                 ]
             },
@@ -1971,7 +1937,7 @@
                 "label": "C",
                 "location": [
                     0.866000,
-                    -1.750000,
+                    -1.250000,
                     0.000000
                 ]
             },
@@ -1979,7 +1945,7 @@
                 "label": "O",
                 "location": [
                     1.732000,
-                    -1.250000,
+                    -0.750000,
                     0.000000
                 ]
             },
@@ -1987,7 +1953,7 @@
                 "label": "O",
                 "location": [
                     0.866000,
-                    -2.750000,
+                    -2.250000,
                     0.000000
                 ]
             },
@@ -1995,14 +1961,6 @@
                 "label": "C",
                 "location": [
                     0.000000,
-                    -0.250000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    -0.866000,
                     0.250000,
                     0.000000
                 ]
@@ -2011,7 +1969,15 @@
                 "label": "C",
                 "location": [
                     -0.866000,
-                    1.250000,
+                    0.750000,
+                    0.000000
+                ]
+            },
+            {
+                "label": "C",
+                "location": [
+                    -0.866000,
+                    1.750000,
                     0.000000
                 ]
             },
@@ -2019,7 +1985,7 @@
                 "label": "O",
                 "location": [
                     0.000000,
-                    1.750000,
+                    2.250000,
                     0.000000
                 ]
             },
@@ -2027,15 +1993,7 @@
                 "label": "O",
                 "location": [
                     -1.732000,
-                    1.750000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "H",
-                "location": [
-                    0.000000,
-                    2.750000,
+                    2.250000,
                     0.000000
                 ]
             }
@@ -2111,13 +2069,6 @@
                     8,
                     10
                 ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    9,
-                    11
-                ]
             }
         ]
     },
@@ -2130,6 +2081,7 @@
         "alias": "G",
         "naturalAnalogShort": "G",
         "aliasHELM": "G",
+        "aliasBILN": "G",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -2247,6 +2199,7 @@
         "alias": "H",
         "naturalAnalogShort": "H",
         "aliasHELM": "H",
+        "aliasBILN": "H",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -2487,6 +2440,7 @@
         "alias": "I",
         "naturalAnalogShort": "I",
         "aliasHELM": "I",
+        "aliasBILN": "I",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -2668,6 +2622,7 @@
         "alias": "L",
         "naturalAnalogShort": "L",
         "aliasHELM": "L",
+        "aliasBILN": "L",
         "attachmentPoints": [
             {
                 "attachmentAtom": 6,
@@ -2847,6 +2802,7 @@
         "alias": "K",
         "naturalAnalogShort": "K",
         "aliasHELM": "K",
+        "aliasBILN": "K",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -3065,6 +3021,7 @@
         "alias": "M",
         "naturalAnalogShort": "M",
         "aliasHELM": "M",
+        "aliasBILN": "M",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -3244,6 +3201,7 @@
         "alias": "F",
         "naturalAnalogShort": "F",
         "aliasHELM": "F",
+        "aliasBILN": "F",
         "attachmentPoints": [
             {
                 "attachmentAtom": 9,
@@ -3475,6 +3433,7 @@
         "alias": "P",
         "naturalAnalogShort": "P",
         "aliasHELM": "P",
+        "aliasBILN": "P",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -3646,6 +3605,7 @@
         "alias": "S",
         "naturalAnalogShort": "S",
         "aliasHELM": "S",
+        "aliasBILN": "S",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -3819,6 +3779,7 @@
         "alias": "T",
         "naturalAnalogShort": "T",
         "aliasHELM": "T",
+        "aliasBILN": "T",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -4009,6 +3970,7 @@
         "alias": "W",
         "naturalAnalogShort": "W",
         "aliasHELM": "W",
+        "aliasBILN": "W",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -4316,6 +4278,7 @@
         "alias": "Y",
         "naturalAnalogShort": "Y",
         "aliasHELM": "Y",
+        "aliasBILN": "Y",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -4586,6 +4549,7 @@
         "alias": "V",
         "naturalAnalogShort": "V",
         "aliasHELM": "V",
+        "aliasBILN": "V",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -4750,6 +4714,7 @@
         "alias": "U",
         "naturalAnalogShort": "U",
         "aliasHELM": "seC",
+        "aliasBILN": "seC",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -4923,6 +4888,7 @@
         "alias": "O",
         "naturalAnalogShort": "O",
         "aliasHELM": "Pyl",
+        "aliasBILN": "Pyl",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,

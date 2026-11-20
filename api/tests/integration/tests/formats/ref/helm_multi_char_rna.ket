@@ -209,14 +209,13 @@
                 "$ref": "monomerTemplate-C___Cytosine"
             },
             {
-                "$ref": "monomerTemplate-daA___N6,N6-dimethyladenine"
+                "$ref": "monomerTemplate-Basem62A"
             }
         ]
     },
     "monomer0": {
         "type": "monomer",
         "id": "0",
-        "seqid": 1,
         "position": {
             "x": 0.000000,
             "y": -0.000000
@@ -227,7 +226,6 @@
     "monomer1": {
         "type": "monomer",
         "id": "1",
-        "seqid": 2,
         "position": {
             "x": 0.000000,
             "y": -1.500000
@@ -238,7 +236,6 @@
     "monomer2": {
         "type": "monomer",
         "id": "2",
-        "seqid": 3,
         "position": {
             "x": 1.500000,
             "y": -0.000000
@@ -249,7 +246,6 @@
     "monomer3": {
         "type": "monomer",
         "id": "3",
-        "seqid": 4,
         "position": {
             "x": 3.000000,
             "y": -0.000000
@@ -260,7 +256,6 @@
     "monomer4": {
         "type": "monomer",
         "id": "4",
-        "seqid": 5,
         "position": {
             "x": 3.000000,
             "y": -1.500000
@@ -271,7 +266,6 @@
     "monomer5": {
         "type": "monomer",
         "id": "5",
-        "seqid": 6,
         "position": {
             "x": 4.500000,
             "y": -0.000000
@@ -282,7 +276,6 @@
     "monomer6": {
         "type": "monomer",
         "id": "6",
-        "seqid": 7,
         "position": {
             "x": 6.000000,
             "y": -0.000000
@@ -293,7 +286,6 @@
     "monomer7": {
         "type": "monomer",
         "id": "7",
-        "seqid": 8,
         "position": {
             "x": 6.000000,
             "y": -1.500000
@@ -304,7 +296,6 @@
     "monomer8": {
         "type": "monomer",
         "id": "8",
-        "seqid": 9,
         "position": {
             "x": 7.500000,
             "y": -0.000000
@@ -315,7 +306,6 @@
     "monomer9": {
         "type": "monomer",
         "id": "9",
-        "seqid": 10,
         "position": {
             "x": 9.000000,
             "y": -0.000000
@@ -326,7 +316,6 @@
     "monomer10": {
         "type": "monomer",
         "id": "10",
-        "seqid": 11,
         "position": {
             "x": 9.000000,
             "y": -1.500000
@@ -337,7 +326,6 @@
     "monomer11": {
         "type": "monomer",
         "id": "11",
-        "seqid": 12,
         "position": {
             "x": 10.500000,
             "y": -0.000000
@@ -348,7 +336,6 @@
     "monomer12": {
         "type": "monomer",
         "id": "12",
-        "seqid": 13,
         "position": {
             "x": 12.000000,
             "y": -0.000000
@@ -359,13 +346,12 @@
     "monomer13": {
         "type": "monomer",
         "id": "13",
-        "seqid": 14,
         "position": {
             "x": 12.000000,
             "y": -1.500000
         },
         "alias": "m62A",
-        "templateId": "daA___N6,N6-dimethyladenine"
+        "templateId": "Basem62A"
     },
     "monomerTemplate-R___Ribose": {
         "type": "monomerTemplate",
@@ -375,7 +361,7 @@
         "fullName": "Ribose",
         "alias": "R",
         "naturalAnalogShort": "R",
-        "aliasHELM": "r",
+        "aliasHELM": "R",
         "attachmentPoints": [
             {
                 "attachmentAtom": 10,
@@ -565,7 +551,7 @@
                     1,
                     7
                 ],
-                "stereo": 1
+                "stereo": 6
             },
             {
                 "type": 1,
@@ -766,7 +752,8 @@
         "fullName": "Phosphate",
         "alias": "P",
         "naturalAnalogShort": "P",
-        "aliasHELM": "p",
+        "aliasHELM": "P",
+        "aliasAxoLabs": "p",
         "attachmentPoints": [
             {
                 "attachmentAtom": 0,
@@ -1407,231 +1394,32 @@
             }
         ]
     },
-    "monomerTemplate-daA___N6,N6-dimethyladenine": {
+    "monomerTemplate-Basem62A": {
         "type": "monomerTemplate",
-        "id": "daA___N6,N6-dimethyladenine",
+        "id": "Basem62A",
         "class": "Base",
-        "classHELM": "RNA",
-        "fullName": "N6,N6-dimethyladenine",
-        "alias": "daA",
-        "naturalAnalogShort": "A",
+        "alias": "m62A",
         "aliasHELM": "m62A",
+        "unresolved": true,
         "attachmentPoints": [
             {
-                "attachmentAtom": 1,
-                "type": "left",
-                "leavingGroup": {
-                    "atoms": [
-                        0
-                    ]
-                }
+                "attachmentAtom": -1,
+                "label": "R1"
+            },
+            {
+                "attachmentAtom": -1,
+                "label": "R2"
+            },
+            {
+                "attachmentAtom": -1,
+                "label": "R3"
+            },
+            {
+                "attachmentAtom": -1,
+                "label": "R4"
             }
         ],
-        "atoms": [
-            {
-                "label": "H",
-                "location": [
-                    -2.488000,
-                    -0.824000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "N",
-                "location": [
-                    -1.488000,
-                    -0.824000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    -0.900000,
-                    -0.015000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    0.051000,
-                    -0.324000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "N",
-                "location": [
-                    0.051000,
-                    -1.324000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    -0.900000,
-                    -1.633000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    0.794000,
-                    0.345000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "N",
-                "location": [
-                    0.586000,
-                    1.324000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    -0.365000,
-                    1.633000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "N",
-                "location": [
-                    -1.108000,
-                    0.963000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "N",
-                "location": [
-                    1.745000,
-                    0.036000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    1.953000,
-                    -0.942000,
-                    0.000000
-                ]
-            },
-            {
-                "label": "C",
-                "location": [
-                    2.488000,
-                    0.706000,
-                    0.000000
-                ]
-            }
-        ],
-        "bonds": [
-            {
-                "type": 1,
-                "atoms": [
-                    0,
-                    1
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    1,
-                    5
-                ]
-            },
-            {
-                "type": 2,
-                "atoms": [
-                    5,
-                    4
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    4,
-                    3
-                ]
-            },
-            {
-                "type": 2,
-                "atoms": [
-                    3,
-                    2
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    2,
-                    1
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    3,
-                    6
-                ]
-            },
-            {
-                "type": 2,
-                "atoms": [
-                    6,
-                    7
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    7,
-                    8
-                ]
-            },
-            {
-                "type": 2,
-                "atoms": [
-                    8,
-                    9
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    9,
-                    2
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    6,
-                    10
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    10,
-                    11
-                ]
-            },
-            {
-                "type": 1,
-                "atoms": [
-                    10,
-                    12
-                ]
-            }
-        ]
+        "atoms": [],
+        "bonds": []
     }
 }

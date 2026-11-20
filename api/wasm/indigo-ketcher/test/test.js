@@ -13,15 +13,15 @@ function parseHrtimeToSeconds(hrtime) {
     return (hrtime[0] + (hrtime[1] / 1e9)).toFixed(3);
 }
 
-function run() {
+async function run() {
     let succeeded = 0;
     let failed = 0;
     console.log("Starting tests...\n")
     var startTestsTime = process.hrtime();
-    tests.forEach(t => {
+    for (const t of tests) {
         try {
             var startTestTime = process.hrtime();
-            t.fn()
+            await t.fn()
             const elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTestTime));
             console.log(`✅ ${t.group}.${t.name} [${elapsedSeconds}s]`);
             succeeded++;
@@ -30,7 +30,7 @@ function run() {
             console.log(e.stack)
             failed++
         }
-    })
+    }
     const elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTestsTime));
     const total = succeeded + failed;
     console.log(`\n${total} tests executed in ${elapsedSeconds} seconds. ${succeeded} succeeded, ${failed} failed.`)
@@ -265,7 +265,7 @@ indigoModuleFn().then(indigo => {
  27 T    5   6   7   5  13  31
 M  CHG  1   1   1
 M  RAD  3  14   3  16   1  18   2
-M  ISO  1  24  13
+M  ISO  3   6  24   7   7  24  13
 M  RBC  4   6  -1  21   4  23   3  25   2
 M  SUB  1  12   2
 M  UNS  1   8   1
@@ -281,6 +281,7 @@ M  END
                     "stereo": "Structure contains stereocenters with undefined stereo configuration",
                     "query": "Structure contains query features",
                     "charge": "Structure has non-zero charge",
+                    "isotopes": 'Structure contains atoms with impossible isotopic number: (5,6)',
                     "ambiguous_h": "Structure contains query features, so ambiguous H could not be checked"
                 }
             );
@@ -553,6 +554,88 @@ M  END
         });
     }
 
+    // valence-mode over the in-process WASM channel.
+    //
+    // Regression cover for issue #3823: the option had no impact on
+    // fold/unfold hydrogens. It reached the Indigo session correctly —
+    // indigoSetOptions filters against a deny-list that never contained it —
+    // but MoleculeAutoLoader failed to forward it to MoleculeJsonLoader, so KET
+    // input, which is what Ketcher actually sends, kept the BIOVIA-2009 model.
+    //
+    // api/c/tests/unit/tests/loader_options.cpp pins the same expectations at
+    // the C-API level. These cases add what it cannot reach: the Emscripten
+    // binding, its per-call IndigoSession and its option filter.
+    {
+        // Verbatim from the issue: a bare, neutral aluminium. Under
+        // BIOVIA-2017 it is an intercepted metal, so unfolding adds no H.
+        const bare_al_ket = JSON.stringify({
+            root: { nodes: [{ $ref: "mol0" }] },
+            mol0: { type: "molecule", atoms: [{ label: "Al", location: [0, 0, 0] }] }
+        });
+
+        const bare_al_molfile = "\n  Indigo  0000000002D\n\n"
+            + "  1  0  0  0  0  0  0  0  0  0999 V2000\n"
+            + "    0.0000    0.0000    0.0000 Al  0  0  0  0  0  0  0  0  0  0  0  0\n"
+            + "M  END\n";
+
+        function unfoldWithValenceMode(struct, mode) {
+            let options = new indigo.MapStringString();
+            options.set("valence-mode", mode);
+            try {
+                return indigo.convert_explicit_hydrogens(struct, "unfold", "smiles", options);
+            } finally {
+                options.delete();
+            }
+        }
+
+        test("valence_mode", "metal_ket_biovia_2017_adds_no_hydrogens", () => {
+            assert.equal(unfoldWithValenceMode(bare_al_ket, "biovia-2017"), "[Al]");
+        });
+
+        test("valence_mode", "metal_ket_biovia_2009_adds_hydrogens", () => {
+            // Unfolding materialises implicit hydrogens as separate ATOMS, so
+            // the SMILES is the expanded form, not the collapsed [AlH3].
+            assert.equal(unfoldWithValenceMode(bare_al_ket, "biovia-2009"), "[Al]([H])([H])[H]");
+        });
+
+        test("valence_mode", "ket_and_molfile_agree", () => {
+            // The defect was format-specific, so a single-format assertion
+            // would have stayed green throughout.
+            assert.equal(unfoldWithValenceMode(bare_al_molfile, "biovia-2017"), "[Al]");
+            assert.equal(unfoldWithValenceMode(bare_al_molfile, "biovia-2009"), "[Al]([H])([H])[H]");
+        });
+
+        test("valence_mode", "default_is_biovia_2009", () => {
+            // "default" is an alias for the legacy table, not "let Indigo choose".
+            assert.equal(
+                unfoldWithValenceMode(bare_al_ket, "default"),
+                unfoldWithValenceMode(bare_al_ket, "biovia-2009"));
+        });
+
+        test("valence_mode", "saturated_metal_is_mode_independent", () => {
+            // Negative control: a SATURATED metal, where interception gives
+            // valence = conn and both models agree. This shape was originally
+            // mistaken for "the option does nothing".
+            const li_h_ket = JSON.stringify({
+                root: { nodes: [{ $ref: "mol0" }] },
+                mol0: {
+                    type: "molecule",
+                    atoms: [{ label: "Li", location: [0, 0, 0] }, { label: "H", location: [1.5, 0, 0] }],
+                    bonds: [{ type: 1, atoms: [0, 1] }]
+                }
+            });
+            assert.equal(
+                unfoldWithValenceMode(li_h_ket, "biovia-2017"),
+                unfoldWithValenceMode(li_h_ket, "biovia-2009"));
+        });
+
+        test("valence_mode", "invalid_value_is_rejected", () => {
+            // The binding forwards unknown values verbatim; the C layer must
+            // reject them rather than silently falling back to a default.
+            assert.throws(() => unfoldWithValenceMode(bare_al_ket, "not-a-mode"));
+        });
+    }
+
     // Convert explicit hydrogens
     {
         test("convert_explicit_hydrogens", "auto", () => {
@@ -773,6 +856,22 @@ M  END
             assert(equal);
             options.delete();
         });
+
+        test("render", "custom_font", async () => {
+            let options = new indigo.MapStringString();
+            options.set("render-output-format", "png");
+            options.set("render-background-color", "1,1,1");
+            var fs = require('fs');
+            const font_data = fs.readFileSync("fonts/Almendra-Regular.ttf").toString("base64");
+            const fonts = JSON.stringify([{ name: "Almendra-Regular", data: font_data }]);
+            options.set("render-fonts", fonts);
+            const ket_data = fs.readFileSync("ketcher_custom_font_test.ket");
+            const png = Buffer.from(indigo.render(ket_data, options), "base64");
+            fs.writeFileSync("custom_font_out.png", png);
+            const { equal } = await looksSame('custom_font_ref.png', 'custom_font_out.png');
+            assert(equal);
+            options.delete();
+        });
     }
 
     // Throws
@@ -895,7 +994,7 @@ M  END
             ad2_options.set("monomerLibrary", monomersLib);
             ad2_options.set("sequence-type", "DNA");
             const res3 = indigo.convert(bug2816_seq, "ket", ad2_options);
-            // fs.writeFileSync("peptide_2816_ref.ket", peptide_ket);
+            // fs.writeFileSync("peptide_2816_ref.ket", res3);
             const peptide_2816_ref = fs.readFileSync("peptide_2816_ref.ket");
             assert.equal(res3, peptide_2816_ref.toString());
             ad2_options.delete();
@@ -1329,7 +1428,7 @@ M  END
             options.set("output-content-type", "application/json");
             options.set("input-format", "chemical/x-biln");
             options.set("monomerLibrary", monomersLib);
-            const biln = "A-[PEG-2]-A";
+            const biln = "A-PEG2-A";
             const ket = JSON.parse(indigo.convert(biln, "ket", options)).struct;
             let save_options = new indigo.MapStringString();
             save_options.set("output-content-type", "application/json");
@@ -1350,7 +1449,7 @@ M  END
             options.set("output-content-type", "application/json");
             options.set("input-format", "chemical/x-biln");
             options.set("monomerLibrary", monomersLib);
-            const biln = "A-[PEG-2]-C(1,3).D-[PEG-2]-E(1,3)";
+            const biln = "A-PEG2-C(1,3).D-PEG2-E(1,3)";
             const ket = JSON.parse(indigo.convert(biln, "ket", options)).struct;
             let save_options = new indigo.MapStringString();
             save_options.set("output-content-type", "application/json");
@@ -1394,7 +1493,7 @@ M  END
             options.set("monomerLibrary", monomersLib);
             const res = indigo.convert("CHEM1{[PEG-2]}$$$$V2.0", "biln", options);
             const res_biln = JSON.parse(res).struct;
-            assert.equal(res_biln, "[PEG-2]");
+            assert.equal(res_biln, "PEG2");
             options.delete();
         });
     }
@@ -1422,7 +1521,7 @@ M  END
             options.set("output-content-type", "application/json");
             options.set("input-format", "chemical/x-biln");
             options.set("monomerLibrary", monomersLib);
-            const biln = "Ac(1,2).A-K(1,3)";
+            const biln = "ac(1,2).A-K(1,3)";
             const res = indigo.convert(biln, "helm", options);
             const res_helm = JSON.parse(res).struct;
             assert.equal(res_helm, "PEPTIDE1{[ac]}|PEPTIDE2{A.K}$PEPTIDE1,PEPTIDE2,1:R2-2:R3$$$V2.0");
@@ -1469,14 +1568,14 @@ M  END
             options.set("output-content-type", "application/json");
             options.set("input-format", "chemical/x-biln");
             options.set("monomerLibrary", monomersLib);
-            const biln = "C(1,3).C(1,1)";
+            const biln = "C(1,1).C(1,3)";
             const ket = JSON.parse(indigo.convert(biln, "ket", options)).struct;
             let save_options = new indigo.MapStringString();
             save_options.set("output-content-type", "application/json");
             save_options.set("input-format", "chemical/x-indigo-ket");
             save_options.set("monomerLibrary", monomersLib);
             const res_biln = JSON.parse(indigo.convert(ket, "biln", save_options)).struct;
-            assert.equal(res_biln, "C(1,1).C(1,3)");
+            assert.equal(res_biln, biln);
             options.delete();
             save_options.delete();
         });
@@ -1636,6 +1735,25 @@ M  END
             // fs.writeFileSync("pathway.sdf", sdf);
             const sdf_ref = fs.readFileSync("pathway.sdf");
             assert.equal(sdf, sdf_ref.toString());
+            options.delete();
+            assert(true);
+        });
+    }
+
+    {
+        test("rgroup molecule to sdf", "1256", () => {
+            var fs = require('fs');
+            const ket = fs.readFileSync("1256-ketR20-from2815.ket");
+            let options = new indigo.MapStringString();
+            options.set('molfile-saving-skip-date', 'true');
+            options.set('ignore-stereochemistry-errors', 'true');
+            const sdf = indigo.convert(ket, "sdf", options);
+            assert.ok(sdf.length > 0, "SDF must not be empty for a free R-group");
+            assert.ok(sdf.includes("$RGP"), "SDF must contain the R-group (RGP) block");
+            // Lossless: the R-group survives an SDF -> KET -> SDF round-trip.
+            const ket_back = indigo.convert(sdf, "ket", options);
+            const sdf2 = indigo.convert(ket_back, "sdf", options);
+            assert.ok(sdf2.includes("$RGP"), "R-group must survive the round-trip");
             options.delete();
             assert(true);
         });
