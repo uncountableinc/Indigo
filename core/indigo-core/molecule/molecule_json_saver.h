@@ -75,7 +75,20 @@ namespace indigo
     protected:
         void saveMoleculeReference(int mol_id, JsonWriter& writer);
         void saveEndpoint(BaseMolecule& mol, const std::string& ep, int beg_idx, int end_idx, JsonWriter& writer, bool hydrogen = false);
+        void saveAtomEndpoint(const std::string& ep, int atom_idx, JsonWriter& writer);
         int getMonomerNumber(int mon_idx);
+
+        // Distributes the groups of the whole molecule over the saved nodes: a group
+        // is declared by the node owning its atoms, while a haptic bond is a root
+        // connection and may cross the component split.
+        void collectAttachmentGroups(BaseMolecule& mol);
+        void saveAttachmentGroups(BaseMolecule& mol, int mol_id, JsonWriter& writer);
+        void saveHapticConnections(BaseMolecule& mol, JsonWriter& writer);
+        void saveHapticEndpoint(const std::string& ep, const HapticBond::Endpoint& endpoint, JsonWriter& writer);
+        // Whether anything of the molecule's haptic bonds reaches the KET file.
+        static bool hasHapticConnections(BaseMolecule& mol);
+        // Molecule node and KET id a group is addressed by.
+        std::pair<int, int> attachmentGroupRef(int group_idx) const;
 
         void writeFloat(JsonWriter& writer, float f_value);
         void writePos(JsonWriter& writer, const Vec3f& pos);
@@ -89,7 +102,10 @@ namespace indigo
         void saveSuperatomAttachmentPoints(Superatom& sa, JsonWriter& writer);
 
         void saveSGroups(BaseMolecule& mol, JsonWriter& writer);
-        void saveSGroup(SGroup& sgroup, JsonWriter& writer);
+        // id and parent_id are numbers of getOrderedSGroups(), which counts from 1 and gives 0 for no parent;
+        // NO_KET_ID writes no key
+        static constexpr int NO_KET_ID = 0;
+        void saveSGroup(SGroup& sgroup, JsonWriter& writer, int id, int parent_id);
 
         void saveAttachmentPoint(BaseMolecule& mol, int atom_idx, JsonWriter& writer);
         void saveStereoCenter(BaseMolecule& mol, int atom_idx, JsonWriter& writer);
@@ -114,6 +130,7 @@ namespace indigo
         std::vector<std::unique_ptr<BaseMolecule>> _no_template_molecules;
         PtrArray<Array<int>> _mappings;
         std::unordered_map<int, int> _atom_to_mol_id;
+        std::vector<std::vector<int>> _mol_attachment_groups;
         std::optional<std::reference_wrapper<ReactionMultistepDetector>> _rmd;
 
     private:

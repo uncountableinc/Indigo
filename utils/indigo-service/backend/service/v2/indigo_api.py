@@ -550,16 +550,7 @@ def save_moldata(
         aux = indigo.inchi.getAuxInfo()
         return "{}\n{}".format(res, aux)
     elif output_format == "chemical/x-sdf":
-        buffer = indigo.writeBuffer()
-        sdfSaver = indigo.createSaver(buffer, "sdf")
-        if md.is_rxn:
-            for mol in md.struct.iterateMolecules():
-                sdfSaver.append(mol.clone())
-        else:
-            for frag in md.struct.iterateComponents():
-                sdfSaver.append(frag.clone())
-        sdfSaver.close()
-        return buffer.toString()
+        return md.struct.fragmentedSdf()
     elif output_format == "chemical/x-rdf":
         buffer = indigo.writeBuffer()
         rdfSaver = indigo.createSaver(buffer, "rdf")
@@ -1531,7 +1522,7 @@ def check():
               examples: C1=CC=CC=C1
             types:
               type: array
-              default: ["valence", "ambiguous_h", "query", "pseudoatoms", "radicals", "stereo", "overlapping_atoms", "overlapping_bonds", "3d", "sgroups", "v3000", "rgroups"]
+              default: ["valence", "ambiguous_h", "query", "pseudoatoms", "radicals", "stereo", "overlapping_atoms", "overlapping_bonds", "3d", "sgroups", "v3000", "rgroups", "isotope"]
               enum:
                 - valence
                 - ambiguous_h
@@ -1545,6 +1536,7 @@ def check():
                 - sgroups
                 - v3000
                 - rgroups
+                - isotope
           example:
             struct: "[C+5]"
             types: ["valence", "ambiguous_h"]
@@ -1708,7 +1700,7 @@ def render():
               type: string
               default: image/svg+xml
             options:
-              type: array
+              type: object
           example:
             struct: C1=CC=CC=C1
             query: C

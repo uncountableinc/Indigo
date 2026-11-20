@@ -20,6 +20,7 @@
 #define __molecule_json_loader__
 
 #include <list>
+#include <map>
 #include <rapidjson/document.h>
 #include <unordered_set>
 #include <vector>
@@ -27,6 +28,7 @@
 #include "base_c/defs.h"
 #include "base_cpp/exception.h"
 #include "base_cpp/non_copyable.h"
+#include "molecule/loader_options.h"
 #include "molecule/molecule_stereocenter_options.h"
 
 #ifdef _WIN32
@@ -65,7 +67,14 @@ namespace indigo
         void loadMolecule(BaseMolecule& mol, bool load_arrows = false);
         void loadMonomerLibrary(MonomerTemplateLibrary& library);
         bool isParsed() const;
+
+        // See loader_options.h for the contract.
+        void setOptions(const LoaderOptions& opts);
+        LoaderOptions getOptions() const;
+
         StereocentersOptions stereochemistry_options;
+        ValenceMode valence_mode;   // valence table used to infer implicit H
+        bool ignore_bad_valence;    // collapse bad valence instead of throwing
         bool treat_x_as_pseudoatom; // normally 'X' means 'any halogen'
         bool skip_3d_chirality;     // do not compute chirality from 3D coordinates
         bool ignore_no_chiral_flag; // ignore chiral flag absence (treat stereo "as drawn")
@@ -104,7 +113,17 @@ namespace indigo
         void parseAtoms(const rapidjson::Value& atoms, BaseMolecule& mol, std::vector<EnhancedStereoCenter>& stereo_centers);
         void parseBonds(const rapidjson::Value& bonds, BaseMolecule& mol);
         void parseHighlight(const rapidjson::Value& highlight, BaseMolecule& mol);
-        void parseSGroups(const rapidjson::Value& sgroups, BaseMolecule& mol);
+        void parseSGroups(const rapidjson::Value& sgroups, BaseMolecule& mol, int node_idx);
+
+        // Adds the node's attachment groups to the already-merged molecule, taking
+        // the atom mapping of that merge. Returns the KET id -> group index map
+        // that haptic connections are resolved through.
+        std::map<std::string, int> parseAttachmentGroups(const rapidjson::Value& groups, BaseMolecule& mol, const Array<int>& atom_mapping);
+
+        HapticBond::Endpoint resolveHapticEndpoint(const rapidjson::Value& endpoint, const PtrArray<Array<int>>& mol_mappings,
+                                                   const std::vector<std::map<std::string, int>>& ag_mappings) const;
+        void loadHapticConnection(const rapidjson::Value& connection, BaseMolecule& mol, const PtrArray<Array<int>>& mol_mappings,
+                                  const std::vector<std::map<std::string, int>>& ag_mappings);
         void parseProperties(const rapidjson::Value& props, BaseMolecule& mol);
         void setStereoFlagPosition(const rapidjson::Value& pos, int fragment_index, BaseMolecule& mol);
         void handleSGroup(SGroup& sgroup, const std::unordered_set<int>& atoms, BaseMolecule& bmol);
@@ -128,6 +147,12 @@ namespace indigo
         std::unordered_map<std::string, int> _id_to_template;
         std::map<std::string, std::string> _template_ref_to_id;
         std::map<std::string, int> _monomer_ref_to_id;
+        // The name a molecule node is referred to by -> its place among the nodes.
+        // A reference is a name and nothing else: the producer may call a node
+        // anything, a uuid included, and list the nodes in any order.
+        std::map<std::string, int> _mol_ref_to_index;
+        // A document that names no S-group parent is read the way Ketcher writes it: a parent is found by atom containment
+        bool _derive_sgroup_parents = true;
         Molecule* _pmol;
         QueryMolecule* _pqmol;
         std::vector<EnhancedStereoCenter> _stereo_centers;

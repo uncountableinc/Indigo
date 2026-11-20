@@ -26,6 +26,10 @@
 #include "reaction/base_reaction.h"
 #include "render_cdxml.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
 typedef void* PVOID;
 
 namespace indigo
@@ -540,6 +544,14 @@ namespace indigo
         CanvasOptions(const CanvasOptions&);
     };
 
+    struct RenderFont
+    {
+        RenderFont(std::string name, std::vector<byte> data);
+
+        std::string name;
+        std::shared_ptr<std::vector<byte>> data;
+    };
+
     class RenderOptions
     {
     public:
@@ -581,6 +593,7 @@ namespace indigo
         bool showCycles; // for diagnostic purposes
         bool agentsBelowArrow;
         Array<char> atomColorProp;
+        bool svgUniqueId; // prefix every id in the SVG output so several SVGs can share one page
         std::unique_ptr<RenderCdxmlContext> cdxml_context;
         // ACS settings
         float bond_length_px;

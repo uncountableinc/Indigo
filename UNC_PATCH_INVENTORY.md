@@ -268,3 +268,28 @@ The contention is uneven, and not where you would guess:
 
 `valence-mode`, the option ketcher 3.18 sends on every server call, first appears in upstream
 1.45. Nothing earlier carries it.
+
+## Supersession at 1.50.0-rc.2
+
+Measured while merging `indigo-1.50.0-rc.2` (version `1.50.0-rc.2+unc36`). Upstream 1.50 now
+implements the formulation S-groups and the COP residue in full, so most of the S-group patch is
+gone:
+
+| Patch | Outcome |
+| --- | --- |
+| COM/MON/MIX classes, `addSGroup` cases | superseded by `poolFactory` and `SGroup::component_order` |
+| COM `SNC` and `COMPNO` readers and writers | superseded by `MOLFILE_SGROUP_COMPONENT_ORDER_*` |
+| COP v2000 `M  SCN` writer | superseded: upstream writes `SCN` for every `typeHasConnectivity` type |
+| COP v3000 `CONNECT`/`SUBTYPE` writer | superseded by the generic v3000 writer |
+| COP arm of `_updateRepeatingUnits` | superseded: upstream computes all S-group brackets by bounding box (#4017) |
+| SDF reaction export in `indigo_api.py` | superseded by `fragmentedSdf()`, which splits a reaction into molecules |
+| KET COM/MIX `subscript` | kept: upstream reads and writes `subscript` for SRU only |
+| KET `compno` | kept as a read alias; the saver writes upstream's `componentOrder` |
+| bracket export, multi-string wrap, rg-label, gross formula, CIP, CDXML, abbreviation roles | reapplied unchanged |
+
+The ketcher fork reads `compno`. Until it moves to upstream 3.22, which reads `componentOrder`,
+a KET written by this release loses the component order in the fork's ketcher. Ship the platform
+Indigo tag together with the Ketcher 3.22 packages.
+
+The nine golden files that conflicted were resolved to upstream and need regeneration from this
+branch's CI wheel, as in the 1.46 bump.

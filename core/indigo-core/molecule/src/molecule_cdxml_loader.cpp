@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstring>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
@@ -223,6 +224,31 @@ std::string CDXProperty::formatValue(ECDXType cdx_type) const
         }
     }
     break;
+    case ECDXType::CDXObjectIDArrayWithCounts: {
+        // A leading UINT16 count, then that many UINT32 object ids. The count is
+        // read from the file, so the payload is checked against it before use.
+        if (_size < sizeof(uint16_t))
+            throw Error("property %d: %u bytes is too short for an id array with counts", _tag, static_cast<unsigned>(_size));
+
+        // Read through memcpy: the ids sit two bytes into the payload, so the
+        // 4-byte reads a cast would generate are misaligned by construction.
+        uint16_t count = 0;
+        std::memcpy(&count, _data, sizeof(count));
+
+        const uint32_t expected = static_cast<uint32_t>(sizeof(uint16_t) + count * sizeof(uint32_t));
+        if (_size != expected)
+            throw Error("property %d: %u ids need %u bytes, the file gives %u", _tag, static_cast<unsigned>(count), expected, static_cast<unsigned>(_size));
+
+        for (uint16_t i = 0; i < count; ++i)
+        {
+            uint32_t id = 0;
+            std::memcpy(&id, _data + sizeof(count) + i * sizeof(id), sizeof(id));
+            if (i)
+                result += " ";
+            result += std::to_string(id);
+        }
+    }
+    break;
     default:
         throw Error("undefined property type: %d", cdx_type);
         break;
@@ -348,6 +374,12 @@ std::string CDXProperty::parseCDXINT8(int8_t val) const
         return kBondReactionParticipationIntToName.at(val);
     case kCDXProp_Bond_RestrictTopology:
         return kBondTopologyIntToName.at(val);
+    case kCDXProp_Atom_Radical:
+        // The node reads the radical by its CDXML name; a code with no name is
+        // left as a number, which it ignores as it ignores an unknown name.
+        if (val >= 0 && val < static_cast<int>(kRadicalIdToStr.size()))
+            return kRadicalIdToStr[val];
+        break;
     default:
         break;
     }
@@ -448,6 +480,8 @@ void MoleculeCdxmlLoader::_initMolecule(BaseMolecule& mol)
     _id_to_node_index.clear();
     _id_to_bond_index.clear();
     _fragment_nodes.clear();
+    _attachment_nodes.clear();
+    _id_to_group_idx.clear();
     _images.clear();
     ket_text_objects.clear();
     _pluses.clear();
@@ -575,6 +609,12 @@ void MoleculeCdxmlLoader::_parseCollections(BaseMolecule& mol)
         case kCDXNodeType_Nickname:
         case kCDXNodeType_Fragment:
             _fragment_nodes.push_back(node_idx);
+            break;
+        // Neither kind is an atom: the node stands for the set of atoms its
+        // Attachments property lists, and becomes an attachment group below.
+        case kCDXNodeType_MultiAttachment:
+        case kCDXNodeType_VariableAttachment:
+            _attachment_nodes.push_back(node_idx);
             break;
         default:
             break;
@@ -1089,8 +1129,15 @@ void MoleculeCdxmlLoader::_addAtomsAndBonds(BaseMolecule& mol, const std::vector
         }
     }
 
+    _addAttachmentGroups(mol);
+
     for (const auto& bond : new_bonds)
     {
+        // A bond to an attachment node is not an edge of the graph: it is the
+        // haptic bond that node was written for.
+        if (_addHapticBond(mol, bond))
+            continue;
+
         int bond_idx;
         if (_pmol)
         {
@@ -1191,6 +1238,74 @@ void MoleculeCdxmlLoader::_addAtomsAndBonds(BaseMolecule& mol, const std::vector
             }
         }
     }
+}
+
+void MoleculeCdxmlLoader::_addAttachmentGroups(BaseMolecule& mol)
+{
+    for (int node_idx : _attachment_nodes)
+    {
+        const CdxmlNode& node = nodes[node_idx];
+
+        // "Required for multi- and variable attached nodes" (CDX spec,
+        // Node_Attachments): without the list the node names no atoms at all.
+        if (node.attachments.empty())
+            throw Error("attachment node %d has no Attachments property", static_cast<int>(node.id));
+
+        std::vector<int> members;
+        members.reserve(node.attachments.size());
+        for (int member_id : node.attachments)
+        {
+            const auto it = _id_to_atom_idx.find(member_id);
+            if (it == _id_to_atom_idx.end())
+                throw Error("attachment node %d is attached to node %d, which is not an atom", static_cast<int>(node.id), member_id);
+            members.push_back(it->second);
+        }
+
+        const int group_idx = mol.attachment_groups.addGroup();
+        AttachmentGroup& group = mol.attachment_groups.group(group_idx);
+        group.setAtoms(members);
+        // "A multicenter attachment node can also have charge and radical attributes,
+        // which are treated as being distributed over the attached nodes" (CDX spec,
+        // Node_Type): they are the group's, not a member atom's. The spec gives a
+        // variable attachment node no such attributes, so its group takes none.
+        if (node.type == kCDXNodeType_MultiAttachment)
+        {
+            group.setCharge(node.charge);
+            group.setRadical(node.radical);
+        }
+        _id_to_group_idx.emplace(node.id, group_idx);
+    }
+}
+
+HapticBond::Endpoint MoleculeCdxmlLoader::_hapticEndpoint(int node_id, int bond_id) const
+{
+    const auto group_it = _id_to_group_idx.find(node_id);
+    if (group_it != _id_to_group_idx.end())
+        return HapticBond::Endpoint::group(group_it->second);
+
+    const auto atom_it = _id_to_atom_idx.find(node_id);
+    if (atom_it != _id_to_atom_idx.end())
+        return HapticBond::Endpoint::atom(atom_it->second);
+
+    throw Error("bond %d reaches node %d, which is neither an atom nor an attachment group", bond_id, node_id);
+}
+
+bool MoleculeCdxmlLoader::_addHapticBond(BaseMolecule& mol, const CdxmlBond& bond)
+{
+    if (_id_to_group_idx.count(bond.be.first) == 0 && _id_to_group_idx.count(bond.be.second) == 0)
+        return false;
+
+    // The two node types share this shape and differ only in what the member set
+    // means: every member at once (haptic, #3233), or any one of them (variable
+    // attachment, #3731). The node the bond reaches decides which bond it is.
+    auto is_variable = [this](int node_id) {
+        const auto it = _id_to_node_index.find(node_id);
+        return it != _id_to_node_index.end() && nodes[it->second].type == kCDXNodeType_VariableAttachment;
+    };
+
+    const int type = is_variable(bond.be.first) || is_variable(bond.be.second) ? _BOND_VARIABLE_ATTACHMENT : _BOND_HAPTIC;
+    mol.addHapticBond(_hapticEndpoint(bond.be.first, bond.id), _hapticEndpoint(bond.be.second, bond.id), type);
+    return true;
 }
 
 void MoleculeCdxmlLoader::_addBracket(BaseMolecule& mol, const CdxmlBracket& bracket)
@@ -1455,6 +1570,25 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
         node.element_list.assign(elements.begin(), elements.end());
     };
 
+    auto attachments_lambda = [&node](const std::string& data) {
+        node.attachments.clear();
+        for (const auto& str : split(data, ' '))
+        {
+            if (str.empty())
+                continue;
+
+            // The list names object ids and nothing else. Parsed strictly rather
+            // than through stoi, which answers "10" to "10abc" and throws a
+            // standard exception - not an Indigo one - on text.
+            int id = 0;
+            const auto parsed = std::from_chars(str.data(), str.data() + str.size(), id);
+            if (parsed.ec != std::errc{} || parsed.ptr != str.data() + str.size() || id < 0)
+                throw Error("Attachments: '%s' is not an object id", str.c_str());
+
+            node.attachments.push_back(id);
+        }
+    };
+
     auto geometry_lambda = [&node](const std::string& data) { node.geometry = KGeometryTypeNameToInt.at(data); };
     auto enhanced_stereo_type_lambda = [&node](const std::string& data) { node.enchanced_stereo = kCDXEnhancedStereoStrToID.at(data); };
 
@@ -1472,6 +1606,7 @@ void MoleculeCdxmlLoader::_parseNode(CdxmlNode& node, BaseCDXElement& elem)
         {"Element", intLambda(node.element)},
         {"GenericNickname", strLambda(node.label)},
         {"ElementList", element_list_lambda},
+        {"Attachments", attachments_lambda},
         {"BondOrdering", bond_ordering_lambda},
         {"Geometry", geometry_lambda},
         {"EnhancedStereoType", enhanced_stereo_type_lambda},
@@ -1652,12 +1787,11 @@ void MoleculeCdxmlLoader::_parseAltGroup(BaseCDXElement& elem)
         {
             MoleculeCdxmlLoader alt_loader(_scanner, _is_binary);
             BaseMolecule& mol = _pmol ? *(BaseMolecule*)_pmol : *(BaseMolecule*)_pqmol;
-            std::unique_ptr<BaseMolecule> fragment(mol.neu());
-            alt_loader.stereochemistry_options = stereochemistry_options;
-            alt_loader.loadMoleculeFromFragment(*fragment, *r_fragments.front());
             MoleculeRGroups& rgroups = mol.rgroups;
             RGroup& rgroup = rgroups.getRGroup(r_labels.front());
-            rgroup.fragments.add(fragment.release());
+            BaseMolecule& fragment = rgroup.fragments.push_t(BaseMolecule::poolFactoryLike(mol));
+            alt_loader.setOptions(getOptions());
+            alt_loader.loadMoleculeFromFragment(fragment, *r_fragments.front());
         }
     }
 }

@@ -767,7 +767,7 @@ XMLElement* CmlSaver::_addSgroupElement(XMLElement* molecule, const SGroupInfo& 
             sg->SetAttribute("title", name);
         }
 
-        const int connectivity = sru.connectivity.value_or(SGroup::HEAD_TO_TAIL);
+        const int connectivity = sru.connectivity;
         if (connectivity == SGroup::HEAD_TO_TAIL)
         {
             sg->SetAttribute("connect", "ht");
@@ -849,13 +849,13 @@ void CmlSaver::_addRgroups(XMLElement* elem, BaseMolecule& mol, bool query)
 
 void CmlSaver::_addRgroupElement(XMLElement* elem, RGroup& rgroup, bool query)
 {
-    PtrPool<BaseMolecule>& frags = rgroup.fragments;
+    PtrReusablePool<BaseMolecule>& frags = rgroup.fragments;
 
     for (int i = frags.begin(); i != frags.end(); i = frags.next(i))
     {
-        BaseMolecule* fragment = frags[i];
+        BaseMolecule& fragment = frags[i];
 
-        _addMoleculeElement(elem, *fragment, query);
+        _addMoleculeElement(elem, fragment, query);
     }
 }
 

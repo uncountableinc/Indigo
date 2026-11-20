@@ -23,6 +23,7 @@
 #include "base_cpp/scanner.h"
 #include "base_cpp/tlscont.h"
 #include "layout/sequence_layout.h"
+#include "layout/sgroup_bracket_layout.h"
 #include "molecule/elements.h"
 #include "molecule/inchi_wrapper.h"
 #include "molecule/molecule.h"
@@ -39,6 +40,27 @@
 #define STRCMP(a, b) strncmp((a), (b), strlen(b))
 
 using namespace indigo;
+
+void MolfileLoader::_buildStereocentersFromParity()
+{
+    for (int i = 0; i < _atoms_num; i++)
+    {
+        const int parity = _stereocenter_parities[i];
+
+        if (parity != MoleculeStereocenters::MDL_PARITY_ODD && parity != MoleculeStereocenters::MDL_PARITY_EVEN)
+            continue;
+
+        if (_bmol->stereocenters.exists(i))
+            continue;
+
+        if (!_bmol->stereocenters.isPossibleStereocenter(*_bmol, i))
+            continue;
+
+        _bmol->addStereocenters(i, MoleculeStereocenters::ATOM_ABS, 0, false);
+        if (MoleculeStereocenters::getMdlParity(*_bmol, i) != parity)
+            _bmol->stereocenters.invertPyramid(i);
+    }
+}
 
 void MolfileLoader::_postLoad()
 {
@@ -207,6 +229,10 @@ void MolfileLoader::_postLoad()
     _bmol->buildFromBondsStereocenters(stereochemistry_options, _sensible_bond_directions.ptr());
     _bmol->buildFromBondsAlleneStereo(stereochemistry_options.ignore_errors, _sensible_bond_directions.ptr());
 
+    // CTfile prescribes ignoring parity while a drawing is present; without one it is the only carrier.
+    if (!BaseMolecule::hasCoord(*_bmol))
+        _buildStereocentersFromParity();
+
     if (!_chiral && treat_stereo_as == 0)
         for (int i = 0; i < _atoms_num; i++)
         {
@@ -230,7 +256,7 @@ void MolfileLoader::_postLoad()
         {
             if (_bmol->stereocenters.getType(i) == 0)
             {
-                if (stereochemistry_options.ignore_errors)
+                if (stereochemistry_options.ignore_errors || _bmol->hasBondsOutsideTheGraph(i))
                     _bmol->addStereocentersIgnoreBad(i, _stereocenter_types[i], _stereocenter_groups[i], false); // add non-valid stereocenters
                 else if (_qmol == nullptr)
                     throw Error("stereo type specified for atom #%d, but the bond "
@@ -247,6 +273,10 @@ void MolfileLoader::_postLoad()
     {
         if (_bmol->getBondDirection(i) && !_sensible_bond_directions[i])
         {
+            const Edge& edge = _bmol->getEdge(i);
+            if (_bmol->hasBondsOutsideTheGraph(edge.beg) || _bmol->hasBondsOutsideTheGraph(edge.end))
+                continue;
+
             if (!stereochemistry_options.ignore_errors && !_qmol) // Don't check for query molecule
                 throw Error("direction of bond #%d makes no sense", i);
         }
@@ -310,6 +340,20 @@ void MolfileLoader::_postLoad()
 
     for (auto idx : templates_to_remove)
         _bmol->tgroups.remove(idx);
+
+    // After everything that addresses atoms by their place in the file:
+    // the phantom stars of haptic records (_addHapticBond3000) leave the structure.
+    if (!_haptic_star_groups.empty())
+    {
+        QS_DEF(Array<int>, stars);
+        stars.clear();
+        for (const auto& star_group : _haptic_star_groups)
+            stars.push(star_group.first);
+        _bmol->removeAtoms(stars);
+        _haptic_star_groups.clear();
+    }
+
+    SGroupBracketLayout(*_bmol).update();
 
     // fix layout
     // if (templates_to_remove.size() && _bmol->countComponents())
@@ -465,11 +509,11 @@ void MolfileLoader::_readRGroups2000()
                 if (strncmp(rgp_chars, "$CTAB", 5) == 0)
                 {
                     _scanner.skipLine();
-                    std::unique_ptr<BaseMolecule> fragment(_bmol->neu());
+                    BaseMolecule& fragment = rgroup.fragments.push_t(BaseMolecule::poolFactoryLike(*_bmol));
 
                     MolfileLoader loader(_scanner);
 
-                    loader._bmol = fragment.get();
+                    loader._bmol = &fragment;
                     if (_bmol->isQueryMolecule())
                     {
                         loader._qmol = &loader._bmol->asQueryMolecule();
@@ -485,8 +529,6 @@ void MolfileLoader::_readRGroups2000()
                     if (loader._rgfile)
                         loader._readRGroups2000();
                     loader._postLoad();
-
-                    rgroup.fragments.add(fragment.release());
                 }
                 else if (strncmp(rgp_chars, "$END ", 5) == 0)
                 {
