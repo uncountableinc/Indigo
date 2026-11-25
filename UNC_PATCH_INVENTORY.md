@@ -37,6 +37,7 @@ Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 | gross formula isotope reset | 1 | 1 | **none** |
 | bracket export mol2000/3000 | 2 | 2 | `formats/unc_sgroup_bracket_export` |
 | COM/MON/MIX sgroup types | 7 | 7 | `basic/unc_sgroup_formulation_types` |
+| COM/MIX sgroup brackets (MAT-105869) | 1 | 1 | `rendering/unc_sgroup_formulation_brackets` |
 | CDXML boronic acid (MAT-72091) | 1 | 1 | 3 |
 | SDF reaction export (MAT-73021) | 1 | 1 | `service test_convert_reaction_to_sdf` |
 | CIP R/S labeling (MAT-75502) | 3 | 2 | `basic/unc_cip_and_group_rs` |
