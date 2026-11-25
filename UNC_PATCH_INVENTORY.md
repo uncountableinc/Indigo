@@ -192,6 +192,12 @@ environment: `celery.auto.conf` appends `%(ENV_CELERYD_OPTS)s`, and `gunicorn.au
 `--workers=$(nproc)` with `%(ENV_GUNICORN_CMD_ARGS)s`. Dropping either silently reverts the
 deployed service to upstream's worker configuration.
 
+`utils/indigo-service/backend/service/requirements.txt` pins `kombu==5.2.4`. Upstream pins
+`celery==5.2.7` and `redis==4.5.5` but leaves kombu open, so pip resolves kombu 5.7.0, which
+needs redis-py 6.1.0 or later. The celery worker then exits at start, and the Imago tests of
+`build_test_publish_indigo_service_old` return 500. Keep the pin until upstream moves celery and
+redis to versions that kombu 5.7 accepts.
+
 Both surviving patches have a matching half in the ketcher fork, for the same reason: upstream
 ketcher's KET schema rejects `MON`/`MIX`/`COM` and the `M`/`P` CIP descriptors because upstream
 Indigo does not produce them. Bumping Indigo does not retire either ketcher patch.
