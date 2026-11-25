@@ -42,9 +42,16 @@ CASES = (
         '{ "type": "COM", "atoms": [0, 1, 2], "compno": 2, "subscript": "c" }',
     ),
     ("MIX", '{ "type": "MIX", "atoms": [0, 1, 2] }'),
-    ("MIX subscript", '{ "type": "MIX", "atoms": [0, 1, 2], "subscript": "mix" }'),
+    (
+        "MIX subscript",
+        '{ "type": "MIX", "atoms": [0, 1, 2], "subscript": "mix" }',
+    ),
 )
 
 print("*** formulation s-groups render brackets and a label ***")
 for name, sgroup in CASES:
-    print("{0}: more paths than MON = {1}".format(name, render_paths(sgroup) > baseline))
+    print(
+        "{0}: more paths than MON = {1}".format(
+            name, render_paths(sgroup) > baseline
+        )
+    )
