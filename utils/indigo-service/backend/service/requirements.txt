@@ -1,10 +1,10 @@
+kombu==5.2.4
 celery==5.2.7
 epam.indigo
 flasgger==0.9.7.1
 Flask==2.3.2
 Flask-HTTPAuth==4.8.1
 gunicorn==23.0.0
-kombu==5.2.4
 marshmallow==3.19.0
 pyparsing==3.0.9
 psycopg2-binary==2.9.6
