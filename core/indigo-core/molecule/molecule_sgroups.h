@@ -22,7 +22,8 @@
 #include "base_cpp/array.h"
 #include "base_cpp/nullable.h"
 #include "base_cpp/obj_pool.h"
-#include "base_cpp/ptr_pool.h"
+#include "base_cpp/ptr_reusable_pool.h"
+#include "base_cpp/reusable.h"
 #include "math/algebra.h"
 #include <vector>
 
@@ -43,7 +44,7 @@ namespace indigo
         Contracted = 1
     };
 
-    class DLLEXPORT SGroup
+    class DLLEXPORT SGroup : public Reusable
     {
     public:
         enum
@@ -110,8 +111,19 @@ namespace indigo
         SGroup();
         virtual ~SGroup();
 
+        // Reusable: restores the default-constructed state, so that a pooled slot can be handed out again.
+        // An override resets the base part through SGroup::reuse().
+        void reuse() override;
+
+        // Initializing form used by the pool: resets through the virtual
+        // reuse() (so a subclass restores its own defaults) and then applies
+        // the requested type, which reuse() alone always sets back to GEN.
+        void reuse(int sg_type);
+
         int sgroup_type;              // group type, represnted with STY in Molfile format
         Nullable<int> sgroup_subtype; // group subtype, represnted with SST in Molfile format
+        int connectivity;             // repeat pattern of a polymer group, SCN in Molfile format (CONNECT in V3000); 0 = not set
+        int component_order;          // order of a component, SNC in Molfile format (COMPNO in V3000); 0 = not numbered
         int index;                    // internal SGroup index; V3000 field 1, V2000 M STY sss. Used for cross-refs (PARENT, SPL).
         int ext_index;                // external SGroup index; V3000 field 3 (extindex), V2000 M SLB vvv. 0 = auto-assign per spec.
         Nullable<int> parent_group;   // parent group index; represented with PARENT in V3000, SPL in V2000
@@ -130,6 +142,17 @@ namespace indigo
             return xbonds;
         }
 
+        // The readers take only a positive order, so a writer asks no more than this.
+        bool hasComponentOrder() const
+        {
+            return component_order != 0;
+        }
+
+        // One zero-length bracket means the group has none: loaders write such placeholders where a format has no
+        // bracket coordinates
+        bool hasBrackets() const;
+        bool isZeroLengthBracket(int bracket_idx) const;
+
         Array<char> label;                  // SMT in Molfile format (LABEL in V3000)
         Nullable<int> brk_style;            // represented with SBT in Molfile format
         Array<Vec2f[2]> brackets;           // represented with SDI in Molfile format
@@ -137,9 +160,16 @@ namespace indigo
 
         static const char* typeToString(int sg_type);
         static int getType(const char* sg_type);
+        static const char* subtypeToString(int sg_subtype);
+        static int getSubtype(const char* sg_subtype);
+        // An unset connectivity reads as either/unknown, the default of the Molfile format.
+        static const char* connectivityToString(int connectivity);
+        static int getConnectivity(const char* connectivity);
+        static bool typeHasConnectivity(int sg_type);
 
     private:
         SGroup(const SGroup&);
+        void _reset();
     };
 
     class DLLEXPORT DataSGroup : public SGroup
@@ -147,6 +177,8 @@ namespace indigo
     public:
         DataSGroup();
         ~DataSGroup() override;
+
+        void reuse() override;
 
         Array<int> cbonds; // chemical bonds, represented with CBONDS/SBL in Molfile format
 
@@ -181,6 +213,7 @@ namespace indigo
 
     private:
         DataSGroup(const DataSGroup&);
+        void _reset();
     };
 
     class DLLEXPORT Superatom : public SGroup
@@ -189,6 +222,8 @@ namespace indigo
         Superatom();
         ~Superatom() override;
 
+        void reuse() override;
+
         Array<char> sa_class;      // SCL in Molfile format
                                    // SDS in Molfile format
         Nullable<int> seqid;       // SEQID (V3000 - 2017)
@@ -196,20 +231,33 @@ namespace indigo
 
         bool unresolved;
 
-        struct _AttachmentPoint
+        struct _AttachmentPoint : public Reusable
         {
             _AttachmentPoint() : aidx(-1), lvidx(-1)
             {
             }
-            _AttachmentPoint(int atom_id) : aidx(atom_id), lvidx(-1)
-            {
-                apid.push(0);
-            }
             int aidx;
             int lvidx;
             Array<char> apid;
+
+            // Restores the default-constructed state.
+            void reuse() override
+            {
+                aidx = -1;
+                lvidx = -1;
+                apid.clear();
+            }
+
+            // An attachment point on `atom` with an empty (zero-terminated) id,
+            // the shape every loader needs.
+            void reuse(int atom)
+            {
+                reuse();
+                aidx = atom;
+                apid.push(0);
+            }
         };
-        ObjPool<_AttachmentPoint> attachment_points; // SAP in Molfile format
+        PtrReusablePool<_AttachmentPoint> attachment_points; // SAP in Molfile format
 
         struct _BondConnection
         {
@@ -222,6 +270,7 @@ namespace indigo
 
     private:
         Superatom(const Superatom&);
+        void _reset();
     };
 
     class DLLEXPORT RepeatingUnit : public SGroup
@@ -230,10 +279,11 @@ namespace indigo
         RepeatingUnit();
         ~RepeatingUnit() override;
 
-        Nullable<int> connectivity;
+        void reuse() override;
 
     private:
         RepeatingUnit(const RepeatingUnit&);
+        void _reset();
     };
 
     class DLLEXPORT CopolymerGroup : public SGroup
@@ -242,42 +292,11 @@ namespace indigo
         CopolymerGroup();
         ~CopolymerGroup() override;
 
-        Nullable<int> connectivity;
+        void reuse() override;
 
     private:
         CopolymerGroup(const CopolymerGroup&);
-    };
-
-    class DLLEXPORT MonomerGroup : public SGroup
-    {
-    public:
-        MonomerGroup();
-        ~MonomerGroup() override;
-
-    private:
-        MonomerGroup(const MonomerGroup&);
-    };
-
-    class DLLEXPORT ComponentGroup : public SGroup
-    {
-    public:
-        ComponentGroup();
-        ~ComponentGroup() override;
-
-        int component_count; // SNC in Molfile format
-
-    private:
-        ComponentGroup(const ComponentGroup&);
-    };
-
-    class DLLEXPORT MixtureGroup : public SGroup
-    {
-    public:
-        MixtureGroup();
-        ~MixtureGroup() override;
-
-    private:
-        MixtureGroup(const MixtureGroup&);
+        void _reset();
     };
 
     class DLLEXPORT MultipleGroup : public SGroup
@@ -286,11 +305,14 @@ namespace indigo
         MultipleGroup();
         ~MultipleGroup() override;
 
+        void reuse() override;
+
         Array<int> parent_atoms;
         Nullable<int> multiplier;
 
     private:
         MultipleGroup(const MultipleGroup&);
+        void _reset();
     };
 
     struct SGroupInfo
@@ -311,6 +333,11 @@ namespace indigo
 
         int addSGroup(const char* sg_type);
         int addSGroup(int sg_type);
+
+        // Factory for the C++ class that represents sg_type. Several sg_type
+        // values map to the base SGroup class and are discriminated by the
+        // sgroup_type field that addSGroup() stamps afterwards.
+        static PtrReusablePool<SGroup>::Factory poolFactory(int sg_type);
         SGroup& getSGroup(int idx);
         SGroup& getSGroup(int idx, int sg_type);
         int getSGroupCount();
@@ -319,17 +346,45 @@ namespace indigo
         bool hasSGroup(int idx);
 
         void buildTree(Tree& tree);
-        bool getParentAtoms(int idx, Array<int>& target);
-        bool getParentAtoms(SGroup& sgroup, Array<int>& target);
+        // The pool position of each group's parent, -1 for none; indexed by pool position, end() entries.
+        // The parent is parent_idx, else the group whose index is parent_group, else - for inputs that
+        // number no group - the group at the one-based pool position parent_group.
+        std::vector<int> resolveParents();
+        // Makes parent_idx the parent of a group, -1 none. A group that names its parent by number keeps doing so,
+        // in the form resolveParents reads back: the parent's index, or its one-based pool position when it has none.
+        void setParent(int sgroup_idx, int parent_idx);
         std::vector<SGroupInfo> getOrderedSGroups();
 
+        // The children of a removed group get no parent; with removeMovingChildrenToGrandparent, its own parent.
         void remove(int idx);
+        void removeMovingChildrenToGrandparent(int sgroup_idx);
+        void moveChildrenToGrandparent(int sgroup_idx);
         void clear();
         void clear(int sg_type);
 
         int begin();
         int end();
         int next(int i);
+
+        // A template, not std::function: this header reaches the Postgres cartridge, where postgres.h defines bind as a
+        // macro on Windows and <functional> no longer compiles
+        template <typename Transform>
+        void transformBrackets(Transform transform)
+        {
+            for (int i = begin(); i != end(); i = next(i))
+            {
+                SGroup& sgroup = getSGroup(i);
+                Array<Vec2f[2]>& brackets = sgroup.brackets;
+                for (int j = 0; j < brackets.size(); ++j)
+                {
+                    // Placeholders stay as loaders wrote them: some savers write them out as they are
+                    if (sgroup.isZeroLengthBracket(j))
+                        continue;
+                    transform(brackets[j][0]);
+                    transform(brackets[j][1]);
+                }
+            }
+        }
 
         enum PropertyTypes
         {
@@ -349,10 +404,13 @@ namespace indigo
         int findSGroupById(int id);
 
     protected:
-        PtrPool<SGroup> _sgroups;
+        PtrReusablePool<SGroup> _sgroups;
 
     private:
         bool _cmpIndices(Array<int>& t_inds, Array<int>& q_inds);
+        // The groups whose resolved parent is the group at sgroup_idx. A structure in which no group names a parent
+        // costs one pass and no allocation: removing many groups is quadratic in the number of groups either way.
+        std::vector<int> _childrenOf(int sgroup_idx);
     };
 
 } // namespace indigo

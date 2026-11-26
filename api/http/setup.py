@@ -20,7 +20,7 @@ entry_points = {
 
 setup_kwargs = {
     "name": "indigo-service",
-    "version": "1.46.0+unc35",
+    "version": "1.50.0+unc36",
     "description": "",
     "long_description": None,
     "author": "Ruslan Khyurri",

@@ -7,6 +7,25 @@ The fork's history is squashed: `5da8a5b03` collapses 57 commits into one, and i
 only some of what it carries. The per-patch history survives on `joe/bump-indigo-1.34.0`, and four
 more patches landed on `master` after the squash. This file is the reconciled result.
 
+The historical inventory below describes the fork delta from `indigo-1.34.0` through 1.46.
+The current fork base is `1.46.0+unc35`, and the current target is `indigo-1.50.0-rc.2`.
+
+## Current 1.50 merge result
+
+The fork release is `1.50.0+unc36`, with the planned tag `indigo-1.50.0-unc36`. The merge uses
+the fork history through `06d2c375d` and common ancestor `a5e9b6cd478644cd908fca1f736a564bedba73c1`.
+
+Upstream 1.50 replaces the old formulation S-group subclasses with generic `SGroup` fields. The
+merge therefore removes `MonomerGroup`, `ComponentGroup`, and `MixtureGroup`, and moves component
+order to `SGroup::component_order`. The JSON loader still accepts the fork's `compno` and
+`subscript` fields, while the saver writes the canonical generic component order and label fields.
+Upstream generic connectivity handling replaces the old explicit COP and COM molfile writer paths.
+
+The merge keeps the fork patches for CDXML labels and geometry, CIP descriptors and automorphism,
+reaction abbreviation roles, SDF reaction export, rg-label loading, gross-formula isotope reset,
+multi-string wrapping, release metadata, and CI service behavior. Check those patches against this
+inventory after each future upstream merge.
+
 Base: `indigo-1.34.0`. Fork delta: 41 commits, 107 files, 0 behind.
 
 ## How to use this during a bump
@@ -27,7 +46,7 @@ how the `SST` claim below was caught and corrected.
 
 ## The patches
 
-Collisions are against `indigo-1.34.0..indigo-1.46.0`.
+The historical collision table is against `indigo-1.34.0..indigo-1.46.0`.
 
 | Patch | Source files | Colliding | Tests |
 | --- | --- | --- | --- |
@@ -101,7 +120,7 @@ The four integration tests follow the repository's golden-output convention, wit
 `utils/indigo-service/backend/service/tests/api/indigo_test.py` and runs against a running
 container, as CI already does.
 
-## Supersession, as measured against 1.46
+## Historical supersession, as measured against 1.46
 
 Upstream 1.46 declares `SG_TYPE_MON`, `SG_TYPE_COP`, `SG_TYPE_COM` and `SG_TYPE_MIX` in the enum,
 which reads like it implements all four. It does not. Checked per patch:

@@ -1,33 +1,52 @@
-# Bumping this fork to upstream 1.46
+# Bumping this fork to upstream 1.50.0-rc.2
 
 Companion to `UNC_PATCH_INVENTORY.md`, which says what each patch owns and what proves it. Read
 that first; this file is the order of operations.
 
 ## Why
 
-Ketcher 3.18 sends `valence-mode` on every standard server call. Upstream added that option in
-1.45, so this fork's 1.34 base rejects it — `option_manager.cpp` throws `Property "%s" not
-defined`, the service leaves `indigo` unset, and the caller sees
-`'NoneType' object has no attribute 'loadMonomerLibrary'`, which names neither the option nor the
-version. It is latent rather than firing: ketcher only populates the option once the setting
-reaches `serverSettings`, and the platform does not set it today. It arms the moment anything does.
+Ketcher 3.22 adds haptic bond support and pins `indigo-ketcher` 1.50.0-rc.2. The fork must carry
+the matching Indigo API, wrapper, and file-format support so the platform can save and reload
+attachment groups.
 
-1.46 is also twelve minors of upstream chemistry fixes, and closes the gap between the server this
-fork builds and the 1.46 in-browser module ketcher 3.18 ships.
+The target also carries upstream chemistry and S-group changes that replace several fork-specific
+implementations with generic fields on `SGroup`. The merge must preserve the remaining fork
+patches for CDXML labels, CIP descriptors, reaction export, gross formulas, and release behavior.
 
 ## Target
 
-**1.46.** Not negotiable downward: `valence-mode` first appears in 1.45, and nothing between 1.35
-and 1.44 carries it.
+**1.50.0-rc.2.** Do not release a lower version. Ketcher 3.22 requires the matching
+`indigo-ketcher` release for haptic bond support.
 
 ## Scale
 
-Upstream changed 1180 files across 247 commits. 48 of this fork's 107 collide, including 12 of its
-17 files under `core/indigo-core`. The contention is uneven — see the inventory for the per-file
-churn. The short version: the CIP work merges nearly clean, six files are genuinely two-sided, and
-two files had their contents moved out from under small patches.
+The target adds a large upstream delta across the core, wrappers, tests, and CI. The contention is
+uneven. Use the inventory for the patch owner of each conflict, and check whole-tree moves before
+restoring a fork patch.
 
-## Phase 0 — cover the untested patches
+## Current 1.50 merge record
+
+The merge uses the fork history through `06d2c375d` and the true common ancestor
+`a5e9b6cd478644cd908fca1f736a564bedba73c1`. The history-aware merge preserves the fork commits
+before it applies `indigo-1.50.0-rc.2`.
+
+The fork release identity is `1.50.0+unc36`, with the planned tag `indigo-1.50.0-unc36`.
+The release keeps the `epam.indigo` Python distribution name and the fork CI, service environment,
+and private release behavior.
+
+Upstream's generic S-group pool and `SGroup` fields now represent copolymer connectivity and
+component order. The merge removes the obsolete `MonomerGroup`, `ComponentGroup`, and
+`MixtureGroup` classes, then keeps compatibility for the fork's KET `compno` and `subscript`
+fields at the JSON boundary.
+
+The merge retains the fork patches for CDXML label styling and collapsed geometry, CIP R/S and
+axial descriptors, abbreviation roles, SDF reaction export, rg-label loading, gross-formula reset,
+and multi-string wrapping. It retains the fork's golden files until CI regenerates the outputs.
+
+The sections below record the prior 1.46 bump. Do not reuse its version, tag, file counts, or
+supersession conclusions for a later bump.
+
+## Historical Phase 0 — cover the untested patches
 
 Six patches have no test: COP copolymer, bracket export, COM/MON/MIX sgroups, SDF reaction export,
 CIP R/S labeling, and the CIP automorphism gate. Five sit in the most contended files in the tree.
@@ -39,7 +58,7 @@ preserved.
 
 COP is the exception — it is being dropped, so it needs no test.
 
-## Phase 1 — drop the COP logic upstream supersedes — **done**
+## Historical Phase 1 — drop the COP logic upstream supersedes — **done**
 
 Upstream 1.46 implements copolymer S-groups identically at five sites, not all eight. Measured
 rather than assumed, which changed this phase's scope:
@@ -69,7 +88,7 @@ without a tag, so land the merge before releasing.
 The pre-bump markers the Rollback section calls for exist: tag `master-pre-1.46-bump` and branch
 `master-backup-pre-1.46-bump`.
 
-## Phase 2 — merge — **done**
+## Historical Phase 2 — merge — **done**
 
 One step to 1.46: 1180 files from upstream, 54 conflicts.
 
@@ -108,7 +127,7 @@ Verified so far: all 396 non-third-party translation units pass `clang -fsyntax-
 project's own flags, and every inventoried patch still has a delta against upstream except those
 marked superseded above.
 
-## Phase 3 — validate
+## Historical Phase 3 — validate
 
 In order, cheapest first:
 
@@ -139,7 +158,7 @@ added between 1.34 and 1.46 will fail on formatting alone. Regenerate through th
 writer and diff numerically — a regenerated golden can hide a real behaviour change just as easily
 as it can absorb a formatting one. This exact mismatch broke the previous bump.
 
-## Phase 4 — release
+## Historical Phase 4 — release
 
 ### How a release happens
 
@@ -199,7 +218,7 @@ Every filename must carry the version just tagged, and there must be three: `mac
 soon as it is published — which is how a local/production mismatch appears without anyone changing
 anything. Expect local setups to jump to 1.46 the moment this release publishes, ahead of Phase 5.
 
-## Phase 5 — move the platform
+## Historical Phase 5 — move the platform
 
 Three pins move together, in one change:
 
@@ -224,15 +243,10 @@ curl -s -X POST http://<host>/v2/indigo/convert -H 'Content-Type: application/js
 A molfile means the bump worked. `'NoneType' object has no attribute 'loadMonomerLibrary'` means it
 did not, whatever the tags say.
 
-## Phase 6 — ketcher
+## Historical Phase 6 — ketcher
 
-Nothing to retire. The ketcher fork's `cip-descriptors` and `sgroup-com-mix-mon` patches exist
-because upstream ketcher's KET schema rejects the `M`/`P` descriptors and the `MON`/`MIX`/`COM`
-S-group types that this fork emits. Upstream implements neither at 1.46, so both halves of both
-patches stay.
-
-What does change: `valence-mode` stops being a landmine, and the ketcher settings dropdown that
-arms it becomes safe to use.
+The next Ketcher task must consume the new fork packages built against Indigo 1.50.0-rc.2.
+Verify haptic bond creation, save, reload, and Indigo rendering after both forks publish.
 
 ## Rollback
 

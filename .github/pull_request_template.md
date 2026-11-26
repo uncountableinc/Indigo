@@ -4,11 +4,11 @@
 * Keep only necessary sections below for the review
 
 ## Generic request
-- [ ] PR name follows the pattern `#1234 – issue name`
+- [ ] PR name follows the pattern `#1234 - issue name`
 - [ ] branch name does not contain '#'
 - [ ] base branch (master or release/xx) is correct
 - [ ] PR is linked with the issue
-- [ ] task status changed to "Code review"
+- [ ] task status changed to "In Review"
 - [ ] code follows product standards
 - [ ] regression tests updated
 ### For release/xx branch
@@ -18,10 +18,10 @@
 - [ ] documentation updated
 
 ## Backmerge request
-- [ ] PR name follows the pattern `Backmerge: #1234 – issue name`
+- [ ] PR name follows the pattern `Backmerge: #1234 - issue name`
 - [ ] PR is linked with the issue
 - [ ] base branch (master or release/xx) is correct
-- [ ] code contains only backmerge changes
+- [ ] code contains only back merge changes
 
 ## Bump request
 - [ ] PR name follows the pattern `Bump version to ...`

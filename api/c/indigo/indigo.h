@@ -492,6 +492,7 @@ CEXPORT int indigoDegree(int atom);
 
 // Returns zero if the charge is ambiguous
 // If the charge is nonambiguous, returns 1 and writes *charge
+// Also takes an attachment group: see indigoAddAttachmentGroup
 CEXPORT int indigoGetCharge(int atom, int* charge);
 // Same as indigoGetCharge
 CEXPORT int indigoGetExplicitValence(int atom, int* valence);
@@ -620,6 +621,44 @@ CEXPORT int indigoSetSGroupAtoms(int sgroup, int natoms, int* atoms);
 CEXPORT int indigoSetSGroupBonds(int sgroup, int nbonds, int* bonds);
 CEXPORT int indigoIterateSGroupCrossBonds(int sgroup);
 
+// Issue #3842: haptic bonds (#3233). An attachment group is a set of atoms acting
+// as one end of a bond - not the R-group "attachment point" of the calls below.
+// Neither a group nor a haptic bond is part of the molecular graph: they never
+// appear in indigoIterateAtoms/indigoIterateBonds of the molecule, only through
+// the calls here. On a group object indigoCountAtoms/indigoIterateAtoms report its
+// members, and indigoRemove drops the group along with the bonds that address it.
+//
+// A group has a charge and a radical of its own, never those of a member atom:
+// indigoGetCharge/indigoSetCharge and indigoGetRadical/indigoSetRadical take a
+// group object as they take an atom, in a molecule and in a query molecule alike.
+// The getters always return 1 for a group - the value is defined, 0 when none is
+// set - and the radical is 0, INDIGO_SINGLET, INDIGO_DOUBLET or INDIGO_TRIPLET.
+// No other atom call takes a group: where an atom has indigoResetCharge and
+// indigoResetRadical, a group is cleared by setting 0. MOL V3000 keeps both values
+// only on the star atom of a haptic bond record, so saving a group that carries
+// them fails when its record ends on an atom of the structure or is a variable
+// attachment; KET keeps them on any group.
+CEXPORT int indigoAddAttachmentGroup(int molecule, int natoms, int* atoms);
+CEXPORT int indigoCountAttachmentGroups(int molecule);
+CEXPORT int indigoIterateAttachmentGroups(int molecule);
+CEXPORT int indigoGetAttachmentGroup(int molecule, int index);
+CEXPORT int indigoSetAttachmentGroupAtoms(int group, int natoms, int* atoms);
+// The atom a file draws the group with (the V3000 star), or 0 when the group has
+// none - a group read from KET never has one.
+CEXPORT int indigoGetAttachmentGroupAnchor(int group);
+// 1 for an attachment group object, 0 for anything else - tells the two kinds of
+// haptic bond end apart.
+CEXPORT int indigoIsAttachmentGroup(int item);
+// Both ends are objects: an atom or an attachment group, at most one of them a group.
+CEXPORT int indigoAddHapticBond(int molecule, int begin, int end);
+CEXPORT int indigoCountHapticBonds(int molecule);
+CEXPORT int indigoIterateHapticBonds(int molecule);
+CEXPORT int indigoGetHapticBond(int molecule, int index);
+CEXPORT int indigoGetHapticBondBegin(int bond);
+CEXPORT int indigoGetHapticBondEnd(int bond);
+// "haptic" (#3233) or "variable-attachment" (Markush, #3731).
+CEXPORT const char* indigoHapticBondType(int bond);
+
 CEXPORT int indigoAddSGroupAttachmentPoint(int sgroup, int aidx, int lvidx, const char* apid);
 CEXPORT int indigoDeleteSGroupAttachmentPoint(int sgroup, int index);
 // Returns iterator of superatom attachment points (SAP entries) for a superatom S-group.
@@ -745,12 +784,15 @@ CEXPORT int indigoSetTemplateAtomClass(int atom, const char* name);
 CEXPORT int indigoAddRSite(int molecule, const char* name);
 CEXPORT int indigoSetRSite(int atom, const char* name);
 
+// Also takes an attachment group: see indigoAddAttachmentGroup
 CEXPORT int indigoSetCharge(int atom, int charge);
 CEXPORT int indigoSetIsotope(int atom, int isotope);
 
 // If the radical is nonambiguous, returns 1 and writes *electrons
 CEXPORT int indigoGetRadicalElectrons(int atom, int* electrons);
 // If the radical is nonambiguous, returns 1 and writes *radical
+// indigoGetRadical and indigoSetRadical also take an attachment group: see
+// indigoAddAttachmentGroup
 CEXPORT int indigoGetRadical(int atom, int* radical);
 CEXPORT int indigoSetRadical(int atom, int radical);
 CEXPORT int indigoResetRadical(int atom);
@@ -792,7 +834,8 @@ CEXPORT int indigoIsSelected(int item);
 // Molecule or reaction
 CEXPORT int indigoHasSelection(int item);
 
-/* Connected components of molecules */
+/* Components of molecules: atoms held together by bonds. A haptic bond holds
+   them as an ordinary bond does, so a ferrocene is one component. */
 
 CEXPORT int indigoCountComponents(int molecule);
 CEXPORT int indigoComponentIndex(int atom);
@@ -802,6 +845,16 @@ CEXPORT int indigoIterateComponents(int molecule);
 // [query] molecule, but supports the indigo{Count,Iterate}{Atoms,Bonds} calls,
 // and also the indigoClone() call, which returns a [query] molecule.
 CEXPORT int indigoComponent(int molecule, int index);
+
+/* Salts: components that are a lone ion or a small inorganic species. A
+   component that haptic bonds hold together is a coordination compound, not
+   a salt. */
+
+// Returns 1 if the molecule has a salt, 0 if it has none.
+CEXPORT int indigoCheckSalt(int molecule);
+// Removes the salts from the molecule. Returns 1 if an atom was removed, 0 if
+// there was nothing to remove.
+CEXPORT int indigoStripSalt(int molecule);
 
 /* Smallest Set of Smallest Rings */
 
@@ -1002,6 +1055,13 @@ CEXPORT long long indigoTell64(int handle);
 
 // Saves the molecule to an SDF output stream
 CEXPORT int indigoSdfAppend(int output, int item);
+
+// Splits the item into fragments (components for a molecule, as
+// indigoIterateComponents() gives them, constituent molecules for a reaction)
+// and returns the whole multi-record SDF as a string. Single entry point for
+// SDF-by-fragments serialization.
+CEXPORT const char* indigoFragmentedSdf(int item);
+
 // Saves the molecule to a multiline SMILES output stream
 CEXPORT int indigoSmilesAppend(int output, int item);
 
@@ -1154,6 +1214,15 @@ CEXPORT int indigoRGroupComposition(int molecule, const char* options);
  * Abbreviations
  */
 CEXPORT int indigoExpandAbbreviations(int molecule);
+
+// Loads supplementary abbreviations (same schema as abbreviations.xml) and
+// appends them to the current session, so they take precedence.
+CEXPORT int indigoLoadAbbreviations(int source);
+CEXPORT int indigoLoadAbbreviationsFromString(const char* string);
+CEXPORT int indigoLoadAbbreviationsFromFile(const char* filename);
+CEXPORT int indigoLoadAbbreviationsFromBuffer(const char* buffer, int size);
+// Drops any abbreviations loaded via indigoLoadAbbreviations*, restoring only the built-ins.
+CEXPORT int indigoResetAbbreviations(void);
 
 /*
  * Group pseudoatoms (OH, NH2, etc.): expand to explicit atoms for V3000/molfile

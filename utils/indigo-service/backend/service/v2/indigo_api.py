@@ -1531,7 +1531,7 @@ def check():
               examples: C1=CC=CC=C1
             types:
               type: array
-              default: ["valence", "ambiguous_h", "query", "pseudoatoms", "radicals", "stereo", "overlapping_atoms", "overlapping_bonds", "3d", "sgroups", "v3000", "rgroups"]
+              default: ["valence", "ambiguous_h", "query", "pseudoatoms", "radicals", "stereo", "overlapping_atoms", "overlapping_bonds", "3d", "sgroups", "v3000", "rgroups", "isotope"]
               enum:
                 - valence
                 - ambiguous_h
@@ -1545,6 +1545,7 @@ def check():
                 - sgroups
                 - v3000
                 - rgroups
+                - isotope
           example:
             struct: "[C+5]"
             types: ["valence", "ambiguous_h"]
@@ -1708,7 +1709,7 @@ def render():
               type: string
               default: image/svg+xml
             options:
-              type: array
+              type: object
           example:
             struct: C1=CC=CC=C1
             query: C

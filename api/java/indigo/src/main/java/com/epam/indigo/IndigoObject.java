@@ -22,7 +22,6 @@ import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -156,6 +155,11 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
     public String monomerLibrary() {
         dispatcher.setSessionID();
         return Indigo.checkResultString(this, lib.indigoMonomerLibrary(self));
+    }
+
+    public String fragmentedSdf() {
+        dispatcher.setSessionID();
+        return Indigo.checkResultString(this, lib.indigoFragmentedSdf(self));
     }
 
     public void saveCml(String filename) {
@@ -857,6 +861,12 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
         return Indigo.checkResult(this, lib.indigoHasSelection(self)) == 1;
     }
 
+    /**
+     * Returns the number of components of the molecule. Atoms joined by a haptic bond belong to
+     * one component, as they do by an ordinary bond.
+     *
+     * @return the number of components
+     */
     public int countComponents() {
         dispatcher.setSessionID();
         return Indigo.checkResult(this, lib.indigoCountComponents(self));
@@ -867,6 +877,12 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
         return Indigo.checkResult(this, lib.indigoComponentIndex(self));
     }
 
+    /**
+     * Iterates the components of the molecule. Atoms joined by a haptic bond belong to one
+     * component, as they do by an ordinary bond.
+     *
+     * @return an iterator over the components
+     */
     public IndigoObject iterateComponents() {
         dispatcher.setSessionID();
         return new IndigoObject(
@@ -880,28 +896,19 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
     }
 
     /**
-     * Verifies whether the structure contains a disconnected inorganic component ("salt").
+     * Verifies whether the structure contains a disconnected inorganic component ("salt"). A
+     * component held together by haptic bonds is a coordination compound, not a salt.
      *
      * @return {@code true} if the structure contains a salt
      */
     public boolean checkSalt() {
         dispatcher.setSessionID();
-
-        for (IndigoObject component : iterateComponents()) {
-            IndigoObject targetFragment = component.clone();
-            for (String salt : Salts.SALTS) {
-                IndigoObject querySalt = dispatcher.loadSmarts(salt);
-                IndigoObject matcher = dispatcher.substructureMatcher(targetFragment);
-                if (matcher.match(querySalt) != null) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return Indigo.checkResult(this, lib.indigoCheckSalt(self)) == 1;
     }
 
     /**
-     * Strips all disconnected inorganic components ("salts") from the molecule.
+     * Strips all disconnected inorganic components ("salts") from the molecule. A component held
+     * together by haptic bonds is a coordination compound and stays.
      *
      * <p>Returns a copy of the molecule without its inorganic components.
      *
@@ -912,7 +919,8 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
     }
 
     /**
-     * Strips all disconnected inorganic components ("salts") from the molecule.
+     * Strips all disconnected inorganic components ("salts") from the molecule. A component held
+     * together by haptic bonds is a coordination compound and stays.
      *
      * @param inplace if {@code false} - returns a copy of the molecule without inorganic
      *     components; if {@code true} - strips inorganic components from the molecule itself
@@ -921,33 +929,9 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
      */
     public IndigoObject stripSalt(boolean inplace) {
         dispatcher.setSessionID();
-
-        ArrayList<Integer> saltAtoms = new ArrayList<>();
-        int idx = 0;
-        for (IndigoObject component : iterateComponents()) {
-            IndigoObject targetFragment = component.clone();
-            int nAtoms = targetFragment.countAtoms();
-
-            for (String salt : Salts.SALTS) {
-                IndigoObject querySalt = dispatcher.loadQueryMolecule(salt);
-                IndigoObject matcher = dispatcher.substructureMatcher(targetFragment);
-                if (matcher.match(querySalt) != null) {
-                    for (int i = idx; i < idx + nAtoms; i++) {
-                        saltAtoms.add(i);
-                    }
-                }
-            }
-            idx += nAtoms;
-        }
-
-        if (!inplace) {
-            IndigoObject saltlessFragment = clone();
-            saltlessFragment.removeAtoms(saltAtoms);
-            return saltlessFragment;
-        } else {
-            removeAtoms(saltAtoms);
-            return this;
-        }
+        IndigoObject target = inplace ? this : clone();
+        Indigo.checkResult(this, lib.indigoStripSalt(target.self));
+        return target;
     }
 
     public int countSSSR() {
@@ -1338,6 +1322,122 @@ public class IndigoObject implements Iterator<IndigoObject>, Iterable<IndigoObje
 
     public int setSGroupAtoms(Collection<Integer> atoms) {
         return setSGroupAtoms(Indigo.toIntArray(atoms));
+    }
+
+    /**
+     * Creates an attachment group - a set of atoms acting as one end of a haptic bond (#3233). Not
+     * an R-group attachment point, and not a part of the molecular graph: it appears neither in
+     * iterateAtoms() nor in countAtoms() of the molecule.
+     */
+    public IndigoObject addAttachmentGroup(int[] atoms) {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher,
+                Indigo.checkResult(this, lib.indigoAddAttachmentGroup(self, atoms.length, atoms)),
+                this);
+    }
+
+    public IndigoObject addAttachmentGroup(Collection<Integer> atoms) {
+        return addAttachmentGroup(Indigo.toIntArray(atoms));
+    }
+
+    public int countAttachmentGroups() {
+        dispatcher.setSessionID();
+        return Indigo.checkResult(this, lib.indigoCountAttachmentGroups(self));
+    }
+
+    public IndigoObject iterateAttachmentGroups() {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher, Indigo.checkResult(this, lib.indigoIterateAttachmentGroups(self)), this);
+    }
+
+    public IndigoObject getAttachmentGroup(int index) {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher,
+                Indigo.checkResult(this, lib.indigoGetAttachmentGroup(self, index)),
+                this);
+    }
+
+    public int setAttachmentGroupAtoms(int[] atoms) {
+        dispatcher.setSessionID();
+        return Indigo.checkResult(
+                this, lib.indigoSetAttachmentGroupAtoms(self, atoms.length, atoms));
+    }
+
+    public int setAttachmentGroupAtoms(Collection<Integer> atoms) {
+        return setAttachmentGroupAtoms(Indigo.toIntArray(atoms));
+    }
+
+    /**
+     * The atom a file draws the group with - the star of a V3000 ENDPTS record. Returns null when
+     * the group has none; a group read from KET never has one.
+     */
+    public IndigoObject getAttachmentGroupAnchor() {
+        dispatcher.setSessionID();
+        int anchor = Indigo.checkResult(this, lib.indigoGetAttachmentGroupAnchor(self));
+        if (anchor == 0) {
+            return null;
+        }
+        return new IndigoObject(dispatcher, anchor, this);
+    }
+
+    /** Tells an attachment group apart from an atom - the two kinds of haptic bond end. */
+    public boolean isAttachmentGroup() {
+        dispatcher.setSessionID();
+        return Indigo.checkResult(this, lib.indigoIsAttachmentGroup(self)) == 1;
+    }
+
+    /**
+     * Creates a haptic bond (#3233) between two ends, each of them an atom or an attachment group;
+     * at most one end may be a group. The bond is not a graph edge: it changes no valence and no
+     * implicit hydrogen count, and it never appears in iterateBonds().
+     */
+    public IndigoObject addHapticBond(IndigoObject begin, IndigoObject end) {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher,
+                Indigo.checkResult(
+                        this, begin, lib.indigoAddHapticBond(self, begin.self, end.self)),
+                this);
+    }
+
+    public int countHapticBonds() {
+        dispatcher.setSessionID();
+        return Indigo.checkResult(this, lib.indigoCountHapticBonds(self));
+    }
+
+    public IndigoObject iterateHapticBonds() {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher, Indigo.checkResult(this, lib.indigoIterateHapticBonds(self)), this);
+    }
+
+    public IndigoObject getHapticBond(int index) {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher, Indigo.checkResult(this, lib.indigoGetHapticBond(self, index)), this);
+    }
+
+    /** The first end of a haptic bond: an atom or an attachment group. */
+    public IndigoObject hapticBondBegin() {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher, Indigo.checkResult(this, lib.indigoGetHapticBondBegin(self)), this);
+    }
+
+    /** The second end of a haptic bond: an atom or an attachment group. */
+    public IndigoObject hapticBondEnd() {
+        dispatcher.setSessionID();
+        return new IndigoObject(
+                dispatcher, Indigo.checkResult(this, lib.indigoGetHapticBondEnd(self)), this);
+    }
+
+    /** "haptic" (#3233) or "variable-attachment" (Markush, #3731). */
+    public String hapticBondType() {
+        dispatcher.setSessionID();
+        return Indigo.checkResultString(this, lib.indigoHapticBondType(self));
     }
 
     public int setSGroupBonds(int[] bonds) {

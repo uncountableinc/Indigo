@@ -16,6 +16,7 @@
  * limitations under the License.
  ***************************************************************************/
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 #include <regex>
@@ -122,7 +123,8 @@ void SequenceLoader::addAminoAcid(KetDocument& document, const std::string& mono
     auto& amino_acid = ambiguous ? document.addAmbiguousMonomer(monomer, aa_id) : document.addMonomer(monomer, aa_id);
     auto& att_points = ambiguous ? document.ambiguousTemplates().at(aa_id).attachmentPoints() : document.templates().at(aa_id).attachmentPoints();
     amino_acid->setAttachmentPoints(att_points);
-    setKetIntProp(*amino_acid, seqid, _seq_id);
+    // as per discussion disable seqid generating for now
+    // setKetIntProp(*amino_acid, seqid, _seq_id);
     amino_acid->setPosition(pos);
 
     if (_seq_id > 1)
@@ -139,7 +141,8 @@ void SequenceLoader::addNucleotide(KetDocument& document, const std::string& bas
     auto& sugar_id = _alias_to_id.at(make_pair(MonomerClass::Sugar, sugar_alias));
     auto& sugar = document.addMonomer(sugar_alias, sugar_id);
     sugar->setAttachmentPoints(document.templates().at(sugar_id).attachmentPoints());
-    setKetIntProp(*sugar, seqid, _seq_id);
+    // as per discussion disable seqid generating for now
+    // setKetIntProp(*sugar, seqid, _seq_id);
     sugar->setPosition(pos);
 
     // add base
@@ -150,7 +153,8 @@ void SequenceLoader::addNucleotide(KetDocument& document, const std::string& bas
         auto& base = ambiguous ? document.addAmbiguousMonomer(base_alias, base_id) : document.addMonomer(base_alias, base_id);
         auto& base_att_points = ambiguous ? document.ambiguousTemplates().at(base_id).attachmentPoints() : document.templates().at(base_id).attachmentPoints();
         base->setAttachmentPoints(base_att_points);
-        setKetIntProp(*base, seqid, _seq_id);
+        // as per discussion disable seqid generating for now
+        // setKetIntProp(*base, seqid, _seq_id);
         Vec3f base_coord(pos.x, pos.y - LayoutOptions::DEFAULT_MONOMER_BOND_LENGTH, 0);
         base->setPosition(base_coord);
 
@@ -169,7 +173,8 @@ void SequenceLoader::addNucleotide(KetDocument& document, const std::string& bas
                 auto& phosphate_id = _alias_to_id.at(make_pair(MonomerClass::Phosphate, phosphate_alias));
                 auto& phosphate = document.addMonomer(phosphate_alias, phosphate_id);
                 phosphate->setAttachmentPoints(document.templates().at(phosphate_id).attachmentPoints());
-                setKetIntProp(*phosphate, seqid, _seq_id - 1);
+                // as per discussion disable seqid generating for now
+                // setKetIntProp(*phosphate, seqid, _seq_id - 1);
                 Vec3f phosphate_coord(pos.x - LayoutOptions::DEFAULT_MONOMER_BOND_LENGTH, pos.y, 0);
                 phosphate->setPosition(phosphate_coord);
 
@@ -184,7 +189,8 @@ void SequenceLoader::addNucleotide(KetDocument& document, const std::string& bas
             auto& phosphate_id = _alias_to_id.at(make_pair(MonomerClass::Phosphate, phosphate_alias));
             auto& phosphate = document.addMonomer(phosphate_alias, phosphate_id);
             phosphate->setAttachmentPoints(document.templates().at(phosphate_id).attachmentPoints());
-            setKetIntProp(*phosphate, seqid, _seq_id);
+            // as per discussion disable seqid generating for now
+            // setKetIntProp(*phosphate, seqid, _seq_id);
             Vec3f phosphate_coord(pos.x + LayoutOptions::DEFAULT_MONOMER_BOND_LENGTH, pos.y, 0);
             phosphate->setPosition(phosphate_coord);
 
@@ -289,7 +295,7 @@ void SequenceLoader::loadIdt(KetDocument& document)
     std::string invalid_symbols;
     while (!_scanner.isEOF())
     {
-        _seq_id = 0;
+        _seq_id = 1;
         _last_monomer_idx = -1;
         _col = 0;
 
@@ -472,6 +478,7 @@ void SequenceLoader::loadIdt(KetDocument& document)
                 {
                     auto mixed_base = idt_alias;
                     std::optional<std::array<float, 4>> ratios;
+                    std::string ratios_owner; // the mixed base as written, e.g. "B1"
                     if (mixed_base.back() == ')')
                     {
                         mixed_base = idt_alias.substr(1, idt_alias.size() - 2);
@@ -490,6 +497,7 @@ void SequenceLoader::loadIdt(KetDocument& document)
                             auto ratios_str = mixed_base.substr(pos + 1, mixed_base.size() - pos - 1);
                             mixed_base = mixed_base.substr(0, pos);
                             check_mixed_base(mixed_base);
+                            ratios_owner = mixed_base;
                             if (ratios_str.size() != 8)
                                 throw Exception("Invalid IDT ambiguous monomer %s", idt_alias.c_str());
                             auto stof = [](const std::string& arg) -> float {
@@ -519,6 +527,23 @@ void SequenceLoader::loadIdt(KetDocument& document)
                         auto it = STANDARD_MIXED_BASES.find(mixed_base);
                         if (it == STANDARD_MIXED_BASES.end())
                             throw Error("Unknown mixed base '%s'", mixed_base.c_str());
+
+                        if (ratios.has_value())
+                        {
+                            auto rna_alias = [&sugar](const std::string& alias) { return sugar == "R" && alias == "T" ? std::string("U") : alias; };
+                            for (const auto& [base_alias, ratio_idx] : IDT_BASE_TO_RATIO_IDX)
+                            {
+                                // "U" shares its percentage with "T", and the mixed base components are listed with "T"
+                                if (base_alias == "U" || ratios.value()[ratio_idx] == 0 ||
+                                    std::find(it->second.begin(), it->second.end(), base_alias) != it->second.end())
+                                    continue;
+                                std::string allowed;
+                                for (const auto& component : it->second)
+                                    allowed += (allowed.empty() ? "" : ", ") + rna_alias(component);
+                                throw Error("Invalid mixed base '%s' - percentage is defined for %s, but only %s are allowed.", ratios_owner.c_str(),
+                                            rna_alias(base_alias).c_str(), allowed.c_str());
+                            }
+                        }
 
                         std::vector<KetAmbiguousMonomerOption> options;
                         for (auto template_alias : it->second)
@@ -664,7 +689,8 @@ void SequenceLoader::loadIdt(KetDocument& document)
             {
                 auto monomer_idx = document.monomers().size();
                 auto& monomer = document.addMonomer(single_monomer_alias, single_monomer);
-                setKetIntProp(*monomer, seqid, _seq_id);
+                // as per discussion disable seqid generating for now
+                // setKetIntProp(*monomer, seqid, _seq_id);
                 monomer->setPosition(getBackboneMonomerPosition());
                 if (_last_monomer_idx >= 0)
                     addMonomerConnection(document, _last_monomer_idx, monomer_idx);
@@ -910,10 +936,11 @@ void SequenceLoader::loadAxoLabs(KetDocument& document)
                 Vec3f pos = getBackboneMonomerPosition();
                 auto monomer_idx = document.monomers().size();
                 auto& monomer_template = document.templates().at(cur_link.mon_id);
-                if (monomer_template.monomerClass() != MonomerClass::Phosphate)
+                if (_seq_id == 0 || monomer_template.monomerClass() != MonomerClass::Phosphate)
                     _seq_id++;
                 auto& monomer = document.addMonomer(getKetStrProp(monomer_template, alias), monomer_template.id());
-                setKetIntProp(*monomer, seqid, _seq_id);
+                // as per discussion disable seqid generating for now
+                // setKetIntProp(*monomer, seqid, _seq_id);
                 monomer->setPosition(pos);
                 if (last_monomer_idx >= 0)
                     addMonomerConnection(document, last_monomer_idx, monomer_idx);
@@ -924,7 +951,8 @@ void SequenceLoader::loadAxoLabs(KetDocument& document)
                     auto& base = document.addMonomer(getKetStrProp(base_template, alias), base_template.id());
                     if (base_id != nullptr)
                         base_id->assign(base->id());
-                    setKetIntProp(*base, seqid, _seq_id);
+                    // as per discussion disable seqid generating for now
+                    // setKetIntProp(*base, seqid, _seq_id);
                     auto base_shift = LayoutOptions::DEFAULT_MONOMER_BOND_LENGTH;
                     if (reverse_base)
                         base_shift = -base_shift;

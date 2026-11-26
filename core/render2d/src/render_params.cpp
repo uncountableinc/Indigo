@@ -71,6 +71,7 @@ void RenderParams::clear()
     rmode = RENDER_NONE;
     rOpt.clearRenderOptions();
     cnvOpt.clear();
+    fonts.reset();
     clearArrays();
 }
 
@@ -128,9 +129,9 @@ bool RenderParamInterface::needsLayout(BaseMolecule& mol)
     MoleculeRGroups& rGroups = mol.rgroups;
     for (int i = 1; i <= rGroups.getRGroupCount(); ++i)
     {
-        PtrPool<BaseMolecule>& frags = rGroups.getRGroup(i).fragments;
+        PtrReusablePool<BaseMolecule>& frags = rGroups.getRGroup(i).fragments;
         for (int j = frags.begin(); j != frags.end(); j = frags.next(j))
-            if (needsLayoutSub(*frags[j]))
+            if (needsLayoutSub(frags[j]))
                 return true;
     }
     return false;
@@ -141,7 +142,7 @@ void RenderParamInterface::_prepareMolecule(RenderParams& params, BaseMolecule& 
     if (needsLayout(bm))
     {
         MoleculeLayout ml(bm, params.smart_layout);
-        ml.layout_orientation = UNCPECIFIED;
+        ml.layout_orientation = UNSPECIFIED;
         ml.make();
         bm.clearBondDirections();
         bm.markBondsStereocenters();
@@ -157,7 +158,7 @@ void RenderParamInterface::_prepareReaction(RenderParams& params, BaseReaction& 
         if (needsLayout(mol))
         {
             MoleculeLayout ml(mol, params.smart_layout);
-            ml.layout_orientation = UNCPECIFIED;
+            ml.layout_orientation = UNSPECIFIED;
             ml.make();
             mol.clearBondDirections();
             mol.markBondsStereocenters();
@@ -193,7 +194,7 @@ void RenderParamInterface::render(RenderParams& params)
     if (params.rmode == RENDER_NONE)
         throw Error("No object to render specified");
 
-    RenderContext rc(params.rOpt, params.relativeThickness, params.bondLineWidthFactor);
+    RenderContext rc(params.rOpt, params.fonts, params.relativeThickness, params.bondLineWidthFactor);
 
     int bondLength_px = (int)(params.rOpt.bond_length_px > EPSILON ? params.rOpt.bond_length_px : LayoutOptions::DEFAULT_BOND_LENGTH_PX);
 
