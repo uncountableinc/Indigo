@@ -82,6 +82,7 @@ namespace indigo
         case SGroup::SG_TYPE_SUP:
         case SGroup::SG_TYPE_DAT:
         case SGroup::SG_TYPE_COP:
+        case SGroup::SG_TYPE_MON:
         case SGroup::SG_TYPE_COM:
         case SGroup::SG_TYPE_MIX:
         case SGroup::SG_TYPE_FOR:
