@@ -9,22 +9,9 @@ sys.path.append(
 )
 from env_indigo import *  # noqa
 
-# Characterisation test for the Uncountable COP copolymer molfile patches.
-#
-# Upstream 1.46 implements copolymer S-groups for KET and for v3000 molfiles,
-# identically to this fork, but not for v2000 and not on the way back in:
-#
-#   - it writes "M  SCN" only for SRU, so COP connectivity never reaches a
-#     v2000 molfile;
-#   - it writes "M  SST" for any subtype but has no reader for it, so a
-#     subtype written to a molfile cannot be read back, for SRU as well as COP.
-#
-# This fork adds the v2000 SCN writer and the SST reader. Without them the SCN
-# line disappears and the reloaded subtype comes back empty.
-#
-# Note what this test does NOT claim: connectivity is reported as EU whatever
-# the input says. That is true of upstream 1.46 as well, so it is recorded here
-# as the behaviour that exists, not as the behaviour that is wanted.
+# Characterisation test for the fork's COP fields in a V2000 molfile round
+# trip. The v2000 writer keeps the connectivity value from the generic S-group
+# field. The subtype writer and reader keep the subtype across the round trip.
 
 indigo = Indigo()
 
