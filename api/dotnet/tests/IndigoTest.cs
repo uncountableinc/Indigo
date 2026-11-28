@@ -126,6 +126,67 @@ M  END
         }
 
         [TestMethod]
+        public void IndigoTestCheckSalt()
+        {
+            using var indigo = new Indigo();
+
+            Assert.IsTrue(indigo.loadMolecule("CCO.[Na+]").checkSalt());
+            Assert.IsFalse(indigo.loadMolecule("CCO").checkSalt());
+        }
+
+        [TestMethod]
+        public void IndigoTestStripSalt()
+        {
+            using var indigo = new Indigo();
+            var m = indigo.loadMolecule("CCO.[Na+]");
+
+            Assert.AreEqual("CCO", m.stripSalt().smiles());
+            Assert.AreEqual("CCO.[Na+]", m.smiles(), "a copy was stripped");
+
+            Assert.AreSame(m, m.stripSalt(true));
+            Assert.AreEqual("CCO", m.smiles());
+        }
+
+        [TestMethod]
+        public void IndigoTestHapticBond()
+        {
+            using var indigo = new Indigo();
+            var m = indigo.loadMolecule("C1=CC=CC1.[Fe]");
+            var metal = m.getAtom(5);
+
+            var group = m.addAttachmentGroup(new int[] { 0, 1, 2, 3, 4 });
+            var bond = m.addHapticBond(group, metal);
+
+            Assert.AreEqual(1, m.countAttachmentGroups());
+            Assert.AreEqual(1, m.countHapticBonds());
+            Assert.AreEqual(5, group.countAtoms());
+            Assert.AreEqual("haptic", bond.hapticBondType());
+            Assert.IsTrue(bond.hapticBondBegin().isAttachmentGroup());
+            Assert.AreEqual("Fe", bond.hapticBondEnd().symbol());
+
+            // Neither construct is a part of the graph.
+            Assert.AreEqual(5, m.countBonds());
+
+            // The group goes, and the bond that addressed it goes with it.
+            group.remove();
+            Assert.AreEqual(0, m.countAttachmentGroups());
+            Assert.AreEqual(0, m.countHapticBonds());
+        }
+
+        [TestMethod]
+        public void IndigoTestAttachmentGroupChargeAndRadical()
+        {
+            using var indigo = new Indigo();
+            var m = indigo.loadMolecule("C1=CC=CC1.[Fe]");
+            var group = m.addAttachmentGroup(new int[] { 0, 1, 2, 3, 4 });
+
+            group.setCharge(-1);
+            group.setRadical(Indigo.DOUBLET);
+            Assert.AreEqual(-1, group.charge());
+            Assert.AreEqual(Indigo.DOUBLET, group.radical());
+        }
+
+        [TestMethod]
         public void IndigoTestCopyRGroup()
         {
             using var indigo = new Indigo();

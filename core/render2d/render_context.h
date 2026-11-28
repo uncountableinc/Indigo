@@ -22,13 +22,14 @@
 #include <cairo-pdf.h>
 #include <cairo-svg.h>
 #include <cairo.h>
+#include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "render_common.h"
 
-#ifdef RENDER_USE_FONT_MANAGER
 #include "render_font_face_manager.h"
-#endif
 
 namespace indigo
 {
@@ -46,7 +47,7 @@ namespace indigo
 
         void checkPathNonEmpty() const;
 
-        RenderContext(const RenderOptions& opt, float relativeThickness, float bondLineWidthFactor);
+        RenderContext(const RenderOptions& opt, const std::unique_ptr<std::vector<RenderFont>>& fonts, float relativeThickness, float bondLineWidthFactor);
         void setDefaultScale(float scale);
         void setHDC(PVOID hdc);
         int getMaxPageSize() const;
@@ -184,6 +185,7 @@ namespace indigo
 
     private:
         static cairo_status_t writer(void* closure, const unsigned char* data, unsigned int length);
+        static cairo_status_t svgWriter(void* closure, const unsigned char* data, unsigned int length);
 
         void _drawGraphItem(GraphItem& gi);
         void lineTo(const Vec2f& v);
@@ -220,10 +222,9 @@ namespace indigo
         cairo_t* _cr;
         cairo_surface_t* _surface;
         void* _meta_hdc;
+        std::optional<std::string> _svgBuffer; // set only while cairo's SVG is held back to make its ids unique
 
-#ifdef RENDER_USE_FONT_MANAGER
         RenderFontFaceManager _font_face_manager;
-#endif
 
     public:
         RenderSettings _settings;

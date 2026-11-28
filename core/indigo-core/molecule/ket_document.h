@@ -21,6 +21,7 @@
 
 #include "molecule/ket_monomer_shape.h"
 #include "molecule/ket_objects.h"
+#include "molecule/loader_options.h"
 #include "molecule/monomers_template_library.h"
 
 #include <rapidjson/document.h> // Temporary until direct conversion to molecule supported
@@ -122,7 +123,7 @@ namespace indigo
 
         void connectMonomerTo(const std::string& mon1, const std::string& ap1, const std::string& mon2, const std::string& ap2);
 
-        const std::vector<KetConnection> connections() const
+        const std::vector<KetConnection>& connections() const
         {
             return _connections;
         };
@@ -131,7 +132,7 @@ namespace indigo
         // i.e. non-backbone and not sugar-base connections
         // connections that create a cycle place here too
         // parseSimplePolymers should be called to fill this list
-        const std::vector<KetConnection> nonSequenceConnections() const
+        const std::vector<KetConnection>& nonSequenceConnections() const
         {
             return _non_sequence_connections;
         };
@@ -149,6 +150,17 @@ namespace indigo
         };
 
         BaseMolecule& getBaseMolecule();
+
+        // getBaseMolecule() converts lazily, long after the Indigo session is
+        // reachable, so the options have to travel with the document.
+        // Out of line: dropping the cached conversion needs the complete
+        // Molecule type, forward-declared here.
+        void setOptions(const LoaderOptions& opts);
+
+        const LoaderOptions& getOptions() const
+        {
+            return _options;
+        }
 
         bool hasAmbiguousMonomerTemplate(const std::string& id) const
         {
@@ -260,6 +272,7 @@ namespace indigo
         std::vector<KetMonomerShape> _monomer_shapes;
         std::optional<KetAnnotation> _annotation;
         mutable std::unique_ptr<Molecule> _cached_molecule;
+        LoaderOptions _options;
     };
 }
 

@@ -1,0 +1,115 @@
+*** building a haptic complex through the API ***
+after building: groups=1 haptic bonds=1
+  group 0: atoms [0, 1, 2, 3, 4]
+  bond 0: type=haptic begin=group 0 [0, 1, 2, 3, 4] end=atom 5 (Fe)
+group countAtoms=5
+
+*** the graph is untouched (isolation invariant of #3837) ***
+bond count unchanged: True
+implicit hydrogens unchanged: True
+valences unchanged: True
+bonds of the molecule: 5
+
+*** what the API builds survives a KET round-trip ***
+reloaded: groups=1 haptic bonds=1
+  group 0: atoms [0, 1, 2, 3, 4]
+  bond 0: type=haptic begin=group 0 [0, 1, 2, 3, 4] end=atom 5 (Fe)
+
+*** what KET brings in is visible through the API ***
+from KET: groups=1 haptic bonds=1
+  group 0: atoms [1, 2, 3, 4, 5]
+  bond 0: type=haptic begin=atom 0 (Fe) end=group 0 [1, 2, 3, 4, 5]
+getAttachmentGroup(0) countAtoms=5
+getHapticBond(0) type=haptic
+
+*** clone keeps them, a submolecule applies the all-or-nothing rule ***
+clone: groups=1 haptic bonds=1
+  group 0: atoms [0, 1, 2, 3, 4]
+  bond 0: type=haptic begin=group 0 [0, 1, 2, 3, 4] end=atom 5 (Fe)
+whole ring without the metal: groups=1 haptic bonds=0
+  group 0: atoms [0, 1, 2, 3, 4]
+part of the ring: groups=0 haptic bonds=0
+
+*** formats that cannot express a haptic bond omit it, without failing ***
+smiles             saved
+canonical smiles   saved
+cml                saved
+
+*** V3000 writes the bond out, V2000 omits it (#3840) ***
+V3000 carries ENDPTS: True
+the group gets a star atom back: True
+V2000 carries ENDPTS: False
+
+*** V3000 absorbs the star of a haptic record, not a variable one's ***
+haptic star in the structure: False
+haptic group anchor: none
+variable attachment anchor: atom 7 (*)
+KET anchor: none
+
+*** membership can be replaced ***
+after setAttachmentGroupAtoms: atoms [0, 1, 2]
+
+*** errors ***
+group to group           molecule: a haptic bond between two attachment groups is not allowed
+bond to own member       molecule: atom 0 is a member of the attachment group it would be bonded to
+partner joins group      molecule: atom 5 is bonded to the attachment group it would join
+atom out of range        core: indigoAddAttachmentGroup(): atom index 99 out of range
+no such group            core: indigoGetAttachmentGroup(): no attachment group with index 99
+no such haptic bond      core: indigoGetHapticBond(): no haptic bond with index 99
+empty group              core: indigoAddAttachmentGroup(): no atoms were given
+
+*** removing a group takes its bonds with it ***
+groups=1 haptic bonds=0
+removed group is gone    core: attachment group 0 does not exist any more
+
+*** removing a haptic bond leaves the group alone ***
+groups=1 haptic bonds=0
+
+*** a group has a charge and a radical of its own ***
+zeise-salt-hydrate.ket:SUCCEED
+as loaded: charge=0 radical=0
+after setting: charge=-1 radical=102
+atom charges unchanged: True
+the same group as the end of its bond: charge=-1 radical=102
+zeise-salt-hydrate-charged.ket:SUCCEED
+zeise-salt-hydrate-charged.mol:SUCCEED
+read back from KET: charge=-1 radical=102
+read back from V3000: charge=-1 radical=102
+unknown radical          core: Unknown radical type
+same on an atom          core: Unknown radical type
+
+*** every radical value, and back to none ***
+singlet: set 101, read 101
+doublet: set 102, read 102
+triplet: set 103, read 103
+none: set 0, read 0
+charge set back: 0
+zeise-salt-hydrate.ket:SUCCEED
+
+*** two groups keep their own values ***
+group 0: charge=1 radical=0
+group 1: charge=2 radical=103
+removed: charge          core: attachment group 0 does not exist any more
+removed: setCharge       core: attachment group 0 does not exist any more
+removed: radical         core: attachment group 0 does not exist any more
+removed: setRadical      core: attachment group 0 does not exist any more
+the other group is as it was: charge=2 radical=103
+
+*** a view taken from the molecule follows the group ***
+before: charge=0 radical=0
+after setCharge: charge=-1 radical=0
+after setRadical: charge=-1 radical=102
+
+*** a group of a query molecule takes them as well ***
+charge=-1 radical=103
+
+*** no other atom call takes a group, and no other object these ***
+resetCharge              core: <attachment group> does not represent an atom
+resetRadical             core: <attachment group> does not represent an atom
+radicalElectrons         core: <attachment group> does not represent an atom
+charge of a bond         core: <bond> does not represent an atom
+of a haptic bond         core: <haptic bond> does not represent an atom
+
+*** V3000 keeps the charge of a haptic group only ***
+variable attachment      molfile saver: attachment group 0 has charge -1 and radical 0, which V3000 can keep only on the star of a haptic bond record
+variable-attachment-charged.ket:SUCCEED

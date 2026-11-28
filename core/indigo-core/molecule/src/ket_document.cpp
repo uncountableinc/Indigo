@@ -145,6 +145,12 @@ std::unique_ptr<KetBaseMonomer>& KetDocument::addAmbiguousMonomer(const std::str
     return addAmbiguousMonomer(id, alias, template_id);
 }
 
+void KetDocument::setOptions(const LoaderOptions& opts)
+{
+    _options = opts;
+    _cached_molecule.reset(); // a stale conversion would keep the old model
+}
+
 BaseMolecule& KetDocument::getBaseMolecule()
 {
     if (!_cached_molecule)
@@ -158,6 +164,7 @@ BaseMolecule& KetDocument::getBaseMolecule()
         rapidjson::Document data;
         std::ignore = data.Parse(json.c_str());
         MoleculeJsonLoader loader(data);
+        loader.setOptions(_options);
         loader.stereochemistry_options.ignore_errors = true;
         loader.ignore_noncritical_query_features = true;
         _cached_molecule = std::make_unique<Molecule>();
@@ -260,7 +267,7 @@ void KetDocument::processAmbiguousMonomerTemplates()
         it.second.setMonomerClass(monomer_class);
         // calc attachment points
         std::map<std::string, KetAttachmentPoint> var_att_points;
-        for (auto opt_it : options)
+        for (auto& opt_it : options)
         {
             if ((opt_it.ratio().has_value() && opt_it.ratio().value() == 0) || (opt_it.probability().has_value() && opt_it.probability().value() == 0))
                 continue;
@@ -303,8 +310,6 @@ static bool isSimplePolymerConnection(MonomerClass cl1, const std::string& ap1, 
         return true;
     if ((cl1 == MonomerClass::Sugar && cl2 == MonomerClass::Sugar) &&
         ((ap1 == kAttachmentPointR1 && ap2 == kAttachmentPointR2) || (ap1 == kAttachmentPointR2 && ap2 == kAttachmentPointR1)))
-        return true;
-    if ((cl1 == MonomerClass::Sugar && cl2 == MonomerClass::Sugar) && ((ap1 == "R1" && ap2 == "R2") || (ap1 == "R2" && ap2 == "R1")))
         return true;
     if (((cl1 == MonomerClass::DNA || cl1 == MonomerClass::RNA) && (cl2 == MonomerClass::Phosphate || cl2 == MonomerClass::Sugar) &&
          (ap1 == kAttachmentPointR2 && ap2 == kAttachmentPointR1)) ||

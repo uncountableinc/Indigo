@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Tuple
 from .hybridization import Hybridization
 from .indigo_exception import IndigoException
 from .indigo_lib import IndigoLib
-from .salts import SALTS
 
 if TYPE_CHECKING:
     from .indigo import Indigo
@@ -303,6 +302,18 @@ class IndigoObject:
         """
 
         return IndigoLib.checkResultString(self._lib().indigoCml(self.id))
+
+    def fragmentedSdf(self):
+        """Structure method returns the structure as a string in SDF format,
+        splitting it into fragments: the components of a molecule, the
+        molecules of a reaction.
+
+        Returns:
+            str: SDF string
+        """
+        return IndigoLib.checkResultString(
+            self._lib().indigoFragmentedSdf(self.id)
+        )
 
     def saveCdxml(self, filename):
         """Molecule method saves the structure into a CDXML file
@@ -1077,10 +1088,12 @@ class IndigoObject:
         return IndigoLib.checkResult(self._lib().indigoDegree(self.id))
 
     def charge(self):
-        """Atom method returns the charge of the atom
+        """Atom or attachment group method returns the charge. The charge of
+        an attachment group is its own, never that of a member atom.
 
         Returns:
-            int: charge
+            int: charge; None for an atom whose charge is ambiguous, as that
+            of a query atom can be. An attachment group always has one.
         """
         value = c_int()
 
@@ -1155,10 +1168,12 @@ class IndigoObject:
         return value.value
 
     def radical(self):
-        """Atom method returns the radical value
+        """Atom or attachment group method returns the radical value
 
         Returns:
-            int: radical value
+            int: 0, Indigo.SINGLET, Indigo.DOUBLET or Indigo.TRIPLET; None
+            for an atom whose radical is ambiguous. An attachment group
+            always has one.
         """
         value = c_int()
 
@@ -1170,10 +1185,14 @@ class IndigoObject:
         return value.value
 
     def setRadical(self, radical):
-        """Atom method sets the radical value
+        """Atom or attachment group method sets the radical value
 
         Args:
-            radical (int): radical value
+            radical (int): 0, Indigo.SINGLET, Indigo.DOUBLET or
+                Indigo.TRIPLET
+
+        Raises:
+            IndigoException: if the value is none of these
 
         Returns:
             int: 1 if there are no errors
@@ -1301,23 +1320,22 @@ class IndigoObject:
         return IndigoLib.checkResult(self._lib().indigoCheckStereo(self.id))
 
     def checkSalt(self):
-        """Molecule method verifies if the structure contains salt.
+        """Molecule method verifies if the structure contains salt: a
+        component that is a lone ion or a small inorganic species. A
+        component held together by haptic bonds is a coordination compound,
+        not a salt.
 
         Returns:
             bool: True if structure contains salt
         """
 
-        for target_fragment in self.iterateComponents():
-            target_fragment = target_fragment.clone()
-            for salt in SALTS:
-                query_salt = self.session.loadSmarts(salt)
-                matcher = self.session.substructureMatcher(target_fragment)
-                if matcher.match(query_salt):
-                    return True
-        return False
+        return bool(
+            IndigoLib.checkResult(self._lib().indigoCheckSalt(self.id))
+        )
 
     def stripSalt(self, inplace=False):
-        """Molecule method strips all inorganic components.
+        """Molecule method strips all inorganic components. A component held
+        together by haptic bonds is a coordination compound and stays.
 
         Args:
             inplace(bool): if False - returns the copy of the molecule,
@@ -1331,27 +1349,9 @@ class IndigoObject:
                           components.
         """
 
-        salts_atoms = []
-        idx = 0
-        for target_fragment in self.iterateComponents():
-            target_fragment = target_fragment.clone()
-            n_atoms = target_fragment.countAtoms()
-
-            for salt in SALTS:
-                query_salt = self.session.loadQueryMolecule(salt)
-                matcher = self.session.substructureMatcher(target_fragment)
-                if matcher.match(query_salt):
-                    salt_position = [i for i in range(idx, idx + n_atoms)]
-                    salts_atoms.extend(salt_position)
-            idx += n_atoms
-
-        if not inplace:
-            saltless_fragment = self.clone()
-            saltless_fragment.removeAtoms(salts_atoms)
-            return saltless_fragment
-        else:
-            self.removeAtoms(salts_atoms)
-            return self
+        target = self if inplace else self.clone()
+        IndigoLib.checkResult(self._lib().indigoStripSalt(target.id))
+        return target
 
     def countHydrogens(self):
         """Atom or Molecule method returns the number of hydrogens
@@ -2080,6 +2080,230 @@ class IndigoObject:
 
         return IndigoLib.checkResult(
             self._lib().indigoClearSGroupCrossBonds(self.id)
+        )
+
+    def addAttachmentGroup(self, atoms):
+        """Molecule method creates an attachment group - a set of atoms acting
+        as one end of a haptic bond (#3233).
+
+        An attachment group is not an R-group attachment point and not a part of
+        the molecular graph: it never shows up in iterateAtoms() or in
+        countAtoms() of the molecule.
+
+        Args:
+            atoms (list): atom index list
+
+        Returns:
+            IndigoObject: attachment group object
+        """
+        arr = (c_int * len(atoms))()
+        for i in range(len(atoms)):
+            arr[i] = atoms[i]
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoAddAttachmentGroup(self.id, len(arr), arr)
+            ),
+            self,
+        )
+
+    def countAttachmentGroups(self):
+        """Molecule method returns the number of attachment groups
+
+        Returns:
+            int: attachment group count
+        """
+
+        return IndigoLib.checkResult(
+            self._lib().indigoCountAttachmentGroups(self.id)
+        )
+
+    def iterateAttachmentGroups(self):
+        """Molecule method iterates attachment groups
+
+        Returns:
+            IndigoObject: attachment groups iterator
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoIterateAttachmentGroups(self.id)
+            ),
+            self,
+        )
+
+    def getAttachmentGroup(self, index):
+        """Molecule method returns the attachment group with the given index
+
+        Args:
+            index (int): attachment group index
+
+        Returns:
+            IndigoObject: attachment group object
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoGetAttachmentGroup(self.id, index)
+            ),
+            self,
+        )
+
+    def setAttachmentGroupAtoms(self, atoms):
+        """Attachment group method replaces the member atoms with the given list
+
+        Args:
+            atoms (list): atom index list
+
+        Returns:
+            int: 1 if there are no errors
+        """
+        arr = (c_int * len(atoms))()
+        for i in range(len(atoms)):
+            arr[i] = atoms[i]
+
+        return IndigoLib.checkResult(
+            self._lib().indigoSetAttachmentGroupAtoms(self.id, len(arr), arr)
+        )
+
+    def getAttachmentGroupAnchor(self):
+        """Attachment group method returns the atom a file draws the group with
+        - the star atom of a V3000 ENDPTS record
+
+        Returns:
+            IndigoObject: the anchor atom, or None when the group has none
+                (a group read from KET never has one)
+        """
+        anchor = IndigoLib.checkResult(
+            self._lib().indigoGetAttachmentGroupAnchor(self.id)
+        )
+        if anchor == 0:
+            return None
+        return IndigoObject(self.session, anchor, self)
+
+    def isAttachmentGroup(self):
+        """Tells an attachment group apart from an atom - the two kinds of object
+        a haptic bond end can be
+
+        Returns:
+            bool: True for an attachment group
+        """
+
+        return (
+            IndigoLib.checkResult(self._lib().indigoIsAttachmentGroup(self.id))
+            == 1
+        )
+
+    def addHapticBond(self, begin, end):
+        """Molecule method creates a haptic bond (#3233) between two ends, each
+        of them an atom or an attachment group. At most one end may be a group.
+
+        A haptic bond is not an edge of the graph: it changes no valence and no
+        implicit hydrogen count, and it never appears in iterateBonds().
+
+        Args:
+            begin (IndigoObject): atom or attachment group
+            end (IndigoObject): atom or attachment group
+
+        Returns:
+            IndigoObject: haptic bond object
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoAddHapticBond(self.id, begin.id, end.id)
+            ),
+            self,
+        )
+
+    def countHapticBonds(self):
+        """Molecule method returns the number of haptic bonds
+
+        Returns:
+            int: haptic bond count
+        """
+
+        return IndigoLib.checkResult(
+            self._lib().indigoCountHapticBonds(self.id)
+        )
+
+    def iterateHapticBonds(self):
+        """Molecule method iterates haptic bonds
+
+        Returns:
+            IndigoObject: haptic bonds iterator
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoIterateHapticBonds(self.id)
+            ),
+            self,
+        )
+
+    def getHapticBond(self, index):
+        """Molecule method returns the haptic bond with the given index
+
+        Args:
+            index (int): haptic bond index
+
+        Returns:
+            IndigoObject: haptic bond object
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoGetHapticBond(self.id, index)
+            ),
+            self,
+        )
+
+    def hapticBondBegin(self):
+        """Haptic bond method returns the first end: an atom or an attachment
+        group object
+
+        Returns:
+            IndigoObject: atom or attachment group
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(
+                self._lib().indigoGetHapticBondBegin(self.id)
+            ),
+            self,
+        )
+
+    def hapticBondEnd(self):
+        """Haptic bond method returns the second end: an atom or an attachment
+        group object
+
+        Returns:
+            IndigoObject: atom or attachment group
+        """
+
+        return IndigoObject(
+            self.session,
+            IndigoLib.checkResult(self._lib().indigoGetHapticBondEnd(self.id)),
+            self,
+        )
+
+    def hapticBondType(self):
+        """Haptic bond method returns the kind of the bond: "haptic" (#3233) or
+        "variable-attachment" (Markush, #3731)
+
+        Returns:
+            str: bond kind
+        """
+
+        return IndigoLib.checkResultString(
+            self._lib().indigoHapticBondType(self.id)
         )
 
     def addSGroupAttachmentPoint(self, aidx, lvidx, apid):
@@ -3016,7 +3240,7 @@ class IndigoObject:
         )
 
     def setCharge(self, charge):
-        """Atom method sets charge
+        """Atom or attachment group method sets charge
 
         Args:
             charge (int): charge value
@@ -3174,7 +3398,8 @@ class IndigoObject:
         )
 
     def countComponents(self):
-        """Molecule method returns the number of components
+        """Molecule method returns the number of components. Atoms joined by
+        a haptic bond belong to one component, as they do by an ordinary bond.
 
         Returns:
             int: number of components
@@ -3194,7 +3419,8 @@ class IndigoObject:
         return IndigoLib.checkResult(self._lib().indigoComponentIndex(self.id))
 
     def iterateComponents(self):
-        """Molecule method returns components iterator
+        """Molecule method returns components iterator. Atoms joined by a
+        haptic bond belong to one component, as they do by an ordinary bond.
 
         Returns:
             IndigoObject: molecule components iterator

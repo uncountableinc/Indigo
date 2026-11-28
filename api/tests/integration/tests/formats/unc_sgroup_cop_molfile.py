@@ -19,12 +19,13 @@ from env_indigo import *  # noqa
 #   - it writes "M  SST" for any subtype but has no reader for it, so a
 #     subtype written to a molfile cannot be read back, for SRU as well as COP.
 #
-# This fork adds the v2000 SCN writer and the SST reader. Without them the SCN
-# line disappears and the reloaded subtype comes back empty.
+# This fork added the v2000 SCN writer and the SST reader. Upstream 1.50 writes
+# SCN for every type with connectivity and reads SST, so both patches are
+# superseded. The test stays so that a later bump that loses the SCN line or the
+# reloaded subtype fails here.
 #
-# Note what this test does NOT claim: connectivity is reported as EU whatever
-# the input says. That is true of upstream 1.46 as well, so it is recorded here
-# as the behaviour that exists, not as the behaviour that is wanted.
+# Upstream 1.46 reloaded the connectivity as EU whatever the input said.
+# Upstream 1.50 keeps the input connectivity, so the reload reports HT.
 
 indigo = Indigo()
 

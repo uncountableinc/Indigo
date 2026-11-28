@@ -19,6 +19,9 @@
 #include "layout/molecule_layout.h"
 #include "base_cpp/array.h"
 #include "graph/filter.h"
+#include "layout/sgroup_bracket_layout.h"
+#include <map>
+#include <utility>
 #include <vector>
 
 using namespace indigo;
@@ -37,6 +40,9 @@ MoleculeLayout::MoleculeLayout(BaseMolecule& molecule, bool smart_layout)
 void MoleculeLayout::_init(bool smart_layout)
 {
     bond_length = 1.f;
+    label_font_size = SGroupBracketLayout::DEFAULT_FONT_SIZE;
+    label_mode = LABEL_MODE_TERMINAL_HETERO;
+    haptic_bond_multiplier = MoleculeLayoutGraph::DEFAULT_HAPTIC_BOND_MULTIPLIER;
     filter = 0;
     _smart_layout = smart_layout;
     if (_smart_layout)
@@ -82,6 +88,8 @@ void MoleculeLayout::_init(bool smart_layout)
         _bm = _molCollapsed.get();
     }
 
+    _giveAtomToAtomHapticBondsToTheLayout();
+
     _layout_graph->makeOnGraph(*_bm);
 
     for (int i = _layout_graph->vertexBegin(); i < _layout_graph->vertexEnd(); i = _layout_graph->vertexNext(i))
@@ -90,201 +98,6 @@ void MoleculeLayout::_init(bool smart_layout)
 
         _layout_graph->getPos(i).set(pos.x, pos.y);
     }
-}
-
-void _collectCrossBonds(Array<int>& crossBonds, Array<bool>& crossBondOut, BaseMolecule& mol, const Array<int>& atoms)
-{
-    QS_DEF(Array<bool>, atomMask);
-    atomMask.clear_resize(mol.vertexEnd());
-    atomMask.fill(false);
-    for (int i = 0; i < atoms.size(); ++i)
-    {
-        int aid = atoms[i];
-        atomMask[aid] = true;
-    }
-    crossBonds.clear();
-    crossBondOut.clear();
-    for (int i = 0; i < atoms.size(); ++i)
-    {
-        int aid = atoms[i];
-        const Vertex& v = mol.getVertex(aid);
-        for (int j = v.neiBegin(); j < v.neiEnd(); j = v.neiNext(j))
-        {
-            int naid = v.neiVertex(j);
-            if (!atomMask[naid])
-            {
-                int bid = v.neiEdge(j);
-                crossBonds.push(bid);
-                crossBondOut.push(mol.getEdge(bid).beg == aid);
-            }
-        }
-    }
-}
-
-void _placeSGroupBracketsCrossBonds(Array<Vec2f[2]>& brackets, BaseMolecule& mol, const Array<int>& atoms, const Array<int>& crossBonds,
-                                    const Array<bool>& crossBondOut, float bondLength)
-{
-    brackets.clear();
-    if (crossBonds.size() == 2)
-    {
-        int bid1 = crossBonds[0], bid2 = crossBonds[1];
-        const Edge& edge1 = mol.getEdge(bid1);
-        const Edge& edge2 = mol.getEdge(bid2);
-        Vec2f pb1, pe1, pb2, pe2;
-        Vec2f::projectZ(pb1, mol.getAtomXyz(edge1.beg));
-        Vec2f::projectZ(pe1, mol.getAtomXyz(edge1.end));
-        Vec2f::projectZ(pb2, mol.getAtomXyz(edge2.beg));
-        Vec2f::projectZ(pe2, mol.getAtomXyz(edge2.end));
-        Vec2f d1, d2;
-        d1.diff(pe1, pb1);
-        if (!crossBondOut[0])
-            d1.scale(-1);
-        d1.normalize();
-        d2.diff(pe2, pb2);
-        if (!crossBondOut[1])
-            d2.scale(-1);
-        d2.normalize();
-        if (Vec2f::dot(d1, d2) < -0.3)
-        {
-            Vec2f d, n;
-            d.add(pb1);
-            d.add(pe1);
-            d.sub(pb2);
-            d.sub(pe2);
-            d.normalize();
-            n.copy(d);
-            n.rotate(1, 0);
-            Vec2f min, max, a, b, c;
-            c.add(pb1);
-            c.add(pe1);
-            c.add(pb2);
-            c.add(pe2);
-            c.scale(0.25f);
-            for (int i = 0; i < atoms.size(); ++i)
-            {
-                int aid = atoms[i];
-                const Vec3f& pos = mol.getAtomXyz(aid);
-                Vec2f p2d;
-                Vec2f::projectZ(p2d, pos);
-                p2d.sub(c);
-                p2d.set(Vec2f::dot(p2d, d), Vec2f::dot(p2d, n));
-                if (i == 0)
-                {
-                    min.copy(p2d);
-                    max.copy(p2d);
-                }
-                else
-                {
-                    min.min(p2d);
-                    max.max(p2d);
-                }
-            }
-            Vec2f b1(c), b2;
-            b1.addScaled(d, max.x + 0.3f * bondLength);
-            b2.copy(b1);
-            float factor = 0.5;
-            b1.addScaled(n, factor * bondLength);
-            b2.addScaled(n, -factor * bondLength);
-            Vec2f* const& bracket1 = brackets.push();
-            bracket1[0].copy(b1);
-            bracket1[1].copy(b2);
-
-            b1.copy(c);
-            b1.addScaled(d, min.x - 0.3f * bondLength);
-            b2.copy(b1);
-            b1.addScaled(n, -factor * bondLength);
-            b2.addScaled(n, factor * bondLength);
-            Vec2f* const& bracket2 = brackets.push();
-            bracket2[0].copy(b1);
-            bracket2[1].copy(b2);
-            return;
-        }
-    }
-    for (int i = 0; i < crossBonds.size(); ++i)
-    {
-        int bid = crossBonds[i];
-        const Edge& edge = mol.getEdge(bid);
-        int aidIn = edge.beg, aidOut = edge.end;
-        if (!crossBondOut[i])
-        {
-
-            std::swap(aidIn, aidOut);
-        }
-        Vec2f p2dIn, p2dOut, d, n, b1, b2;
-        Vec2f::projectZ(p2dIn, mol.getAtomXyz(aidIn));
-        Vec2f::projectZ(p2dOut, mol.getAtomXyz(aidOut));
-        d.diff(p2dOut, p2dIn);
-        d.normalize();
-        n.copy(d);
-        n.rotate(1, 0);
-        float offset = 1.0f / 3;
-        b1.lineCombin2(p2dIn, 1 - offset, p2dOut, offset);
-        b2.copy(b1);
-        float factor = 0.5;
-        b1.addScaled(n, factor * bondLength);
-        b2.addScaled(n, -factor * bondLength);
-        Vec2f* const& bracket = brackets.push();
-        bracket[0].copy(b1);
-        bracket[1].copy(b2);
-    }
-}
-
-void _placeSGroupBracketsCrossBondSingle(Array<Vec2f[2]>& brackets, BaseMolecule& mol, const Array<int>& atoms, int bid, bool out, float bondLength)
-{
-    brackets.clear();
-    const Edge& edge = mol.getEdge(bid);
-    int aidIn = edge.beg, aidOut = edge.end;
-    if (!out)
-    {
-
-        std::swap(aidIn, aidOut);
-    }
-
-    Vec2f p2dIn, p2dOut, d, n, b1, b2;
-    Vec2f::projectZ(p2dIn, mol.getAtomXyz(aidIn));
-    Vec2f::projectZ(p2dOut, mol.getAtomXyz(aidOut));
-    d.diff(p2dOut, p2dIn);
-    d.normalize();
-    n.copy(d);
-    n.rotate(1, 0);
-    Vec2f min, max, a, b;
-
-    for (int i = 0; i < atoms.size(); ++i)
-    {
-        int aid = atoms[i];
-        const Vec3f& pos = mol.getAtomXyz(aid);
-        Vec2f p2d;
-        Vec2f::projectZ(p2d, pos);
-        p2d.sub(p2dIn);
-        p2d.set(Vec2f::dot(p2d, d), Vec2f::dot(p2d, n));
-        if (i == 0)
-        {
-            min.copy(p2d);
-            max.copy(p2d);
-        }
-        else
-        {
-            min.min(p2d);
-            max.max(p2d);
-        }
-    }
-
-    b1.lineCombin(p2dIn, d, max.x + 0.3f * bondLength);
-    b2.copy(b1);
-    float factor = 0.5;
-    b1.addScaled(n, factor * bondLength);
-    b2.addScaled(n, -factor * bondLength);
-    Vec2f* const& bracket1 = brackets.push();
-    bracket1[0].copy(b1);
-    bracket1[1].copy(b2);
-
-    b1.lineCombin(p2dIn, d, min.x - 0.3f * bondLength);
-    b2.copy(b1);
-    b1.addScaled(n, -factor * bondLength);
-    b2.addScaled(n, factor * bondLength);
-    Vec2f* const& bracket2 = brackets.push();
-    bracket2[0].copy(b1);
-    bracket2[1].copy(b2);
 }
 
 void _placeSGroupBracketsHorizontal(Array<Vec2f[2]>& brackets, BaseMolecule& mol, const Array<int>& atoms, float bondLength)
@@ -366,14 +179,119 @@ void MoleculeLayout::_updateDataSGroups()
     }
 }
 
+std::vector<std::pair<int, int>> MoleculeLayout::_atomToAtomHapticRings() const
+{
+    // Which haptic bonds between two atoms close a ring of such bonds. HapticLayout
+    // places one component after another, and a ring cannot be closed that way - the
+    // last component would have to satisfy two bonds at once - so a ring goes to the
+    // ordinary layout, which sees all of it at once. A lone bond between two
+    // fragments stays here: HapticLayout draws it longer when that is what keeps the
+    // fragments apart, and the ordinary layout has no such freedom.
+    const Array<int>& component = _molecule.getDecomposition();
+
+    std::vector<std::pair<int, int>> joining;
+    const MoleculeHapticBonds& bonds = _molecule.haptic_bonds;
+    for (int i = bonds.begin(); i != bonds.end(); i = bonds.next(i))
+    {
+        const HapticBond& bond = bonds.at(i);
+        if (bond.type() != _BOND_HAPTIC || bond.begin().isGroup() || bond.end().isGroup())
+            continue;
+
+        const int beg = bond.begin().index(), end = bond.end().index();
+        if (beg == end || !_molecule.hasVertex(beg) || !_molecule.hasVertex(end) || _molecule.findEdgeIndex(beg, end) >= 0)
+            continue;
+
+        // Both ends in one component: the edges between them already settle the
+        // geometry, and adding one more would change the shape of the fragment.
+        if (component[beg] == component[end])
+            continue;
+
+        joining.push_back(std::make_pair(beg, end));
+    }
+
+    std::vector<std::pair<int, int>> ringed;
+    if (joining.empty())
+        return ringed;
+
+    // Group the bonds by what they connect. A group of components joined into a
+    // tree has one bond fewer than it has components; as many bonds as components
+    // means a ring somewhere in it.
+    std::map<int, int> parent;
+    for (const std::pair<int, int>& pair : joining)
+        for (int atom : {pair.first, pair.second})
+            parent.insert(std::make_pair(component[atom], component[atom]));
+
+    const auto root = [&parent](int of) {
+        while (parent[of] != of)
+        {
+            parent[of] = parent[parent[of]];
+            of = parent[of];
+        }
+        return of;
+    };
+
+    for (const std::pair<int, int>& pair : joining)
+    {
+        const int one = root(component[pair.first]), two = root(component[pair.second]);
+        if (one != two)
+            parent[one] = two;
+    }
+
+    std::map<int, int> components_of, bonds_of;
+    for (const std::pair<const int, int>& entry : parent)
+        components_of[root(entry.first)]++;
+    for (const std::pair<int, int>& pair : joining)
+        bonds_of[root(component[pair.first])]++;
+
+    for (const std::pair<int, int>& pair : joining)
+    {
+        const int group = root(component[pair.first]);
+        if (bonds_of[group] >= components_of[group])
+            ringed.push_back(pair);
+    }
+
+    return ringed;
+}
+
+void MoleculeLayout::_giveAtomToAtomHapticBondsToTheLayout()
+{
+    if (_molecule.isQueryMolecule() || _molecule.haptic_bonds.isEmpty())
+        return;
+
+    const std::vector<std::pair<int, int>> ringed = _atomToAtomHapticRings();
+    if (ringed.empty())
+        return;
+
+    if (!_molCollapsed)
+    {
+        _molCollapsed = std::make_unique<Molecule>();
+        _molCollapsed->clone(_molecule, &_atomMapping, NULL);
+        _bm = _molCollapsed.get();
+    }
+
+    Molecule& copy = _bm->asMolecule();
+    for (const std::pair<int, int>& pair : ringed)
+    {
+        const int beg = _atomMapping[pair.first], end = _atomMapping[pair.second];
+        if (beg < 0 || end < 0 || !copy.hasVertex(beg) || !copy.hasVertex(end) || copy.findEdgeIndex(beg, end) >= 0)
+            continue;
+
+        // Silent: the copy is thrown away once the coordinates are read off it, and
+        // the valence of the original never hears about this bond (#3837).
+        copy.addBond_Silent(beg, end, BOND_SINGLE);
+    }
+}
+
 void MoleculeLayout::_make()
 {
     _layout_graph->max_iterations = max_iterations;
     _layout_graph->layout_orientation = layout_orientation;
     _layout_graph->respect_cycles_direction = respect_cycles_direction;
     _layout_graph->sequence_layout = sequence_layout;
+    _layout_graph->haptic_bond_multiplier = haptic_bond_multiplier;
     // 0. Find 2D coordinates via proxy _layout_graph object
     _layout_graph->max_iterations = max_iterations;
+    SGroupBracketLayout brackets(_molecule, label_font_size, label_mode);
     _makeLayout();
 
     // 1. Update data-sgroup label position before changing molecule atoms positions
@@ -386,7 +304,7 @@ void MoleculeLayout::_make()
         _bm->setAtomXyz(vert.ext_idx, vert.pos.x, vert.pos.y, 0.f);
     }
 
-    if (_hasMulGroups)
+    if (_molCollapsed)
     {
         for (int j = 0; j < _atomMapping.size(); ++j)
         {
@@ -398,7 +316,7 @@ void MoleculeLayout::_make()
 
     _updateMultipleGroups();
 
-    _updateRepeatingUnits();
+    brackets.update();
 
     _molecule.have_xyz = true;
 }
@@ -424,7 +342,13 @@ void MoleculeLayout::updateSGroups()
 {
     _updateDataSGroups();
     _updateMultipleGroups();
-    _updateRepeatingUnits();
+    SGroupBracketLayout(_molecule, label_font_size, label_mode).update();
+}
+
+void MoleculeLayout::setLabelOptions(const LayoutOptions& options)
+{
+    label_font_size = SGroupBracketLayout::labelFontSizeInAngstroms(options);
+    label_mode = options.labelMode;
 }
 
 void MoleculeLayout::make()
@@ -440,16 +364,19 @@ void MoleculeLayout::make()
         {
             RGroup& rg = rgs.getRGroup(i);
             Metalayout::LayoutLine& line = _ml.newLine();
-            PtrPool<BaseMolecule>& frags = rg.fragments;
+            PtrReusablePool<BaseMolecule>& frags = rg.fragments;
             for (int j = frags.begin(); j != frags.end(); j = frags.next(j))
             {
-                BaseMolecule& mol = *frags[j];
+                BaseMolecule& mol = frags[j];
                 if (filter == NULL)
                 {
                     MoleculeLayout layout(mol, _smart_layout);
                     layout.max_iterations = max_iterations;
                     layout.layout_orientation = layout_orientation;
                     layout.bond_length = bond_length;
+                    layout.label_font_size = label_font_size;
+                    layout.label_mode = label_mode;
+                    layout.haptic_bond_multiplier = haptic_bond_multiplier;
                     layout.multiple_distance = multiple_distance;
                     layout.make();
                 }
@@ -502,29 +429,6 @@ void MoleculeLayout::_makeLayout()
     }
     else
         _layout_graph->layout(*_bm, bond_length, 0, respect_existing_layout, multiple_distance);
-}
-
-void MoleculeLayout::_updateRepeatingUnits()
-{
-    QS_DEF(Array<int>, crossBonds);
-    QS_DEF(Array<bool>, crossBondOut);
-    for (int i = _molecule.sgroups.begin(); i != _molecule.sgroups.end(); i = _molecule.sgroups.next(i))
-    {
-        SGroup& sg = _molecule.sgroups.getSGroup(i);
-        if (sg.sgroup_type == SGroup::SG_TYPE_SRU || sg.sgroup_type == SGroup::SG_TYPE_COP)
-        {
-            RepeatingUnit& ru = (RepeatingUnit&)sg;
-            crossBonds.clear();
-            crossBondOut.clear();
-            _collectCrossBonds(crossBonds, crossBondOut, _molecule, ru.atoms);
-            if (crossBonds.size() > 1)
-                _placeSGroupBracketsCrossBonds(ru.brackets, _molecule, ru.atoms, crossBonds, crossBondOut, bond_length);
-            else if (crossBonds.size() == 1)
-                _placeSGroupBracketsCrossBondSingle(ru.brackets, _molecule, ru.atoms, crossBonds[0], crossBondOut[0], bond_length);
-            else
-                _placeSGroupBracketsHorizontal(ru.brackets, _molecule, ru.atoms, bond_length);
-        }
-    }
 }
 
 void MoleculeLayout::_updateMultipleGroups()

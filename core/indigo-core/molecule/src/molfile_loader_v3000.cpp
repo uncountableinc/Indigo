@@ -16,7 +16,10 @@
  * limitations under the License.
  ***************************************************************************/
 
+#include <algorithm>
+#include <cstdlib>
 #include <memory>
+#include <vector>
 
 #include "../layout/molecule_layout.h"
 #include "base_cpp/output.h"
@@ -29,6 +32,7 @@
 #include "molecule/molecule_3d_constraints.h"
 #include "molecule/molecule_inchi.h"
 #include "molecule/molecule_stereocenters.h"
+#include "molecule/molfile_commons.h"
 #include "molecule/molfile_loader.h"
 #include "molecule/molfile_saver.h"
 #include "molecule/monomer_commons.h"
@@ -39,6 +43,14 @@
 #define STRCMP(a, b) strncmp((a), (b), strlen(b))
 
 using namespace indigo;
+
+// A V3000 Sgroup type or subtype may be spelled out: COPolymer, BLOck. Only this many letters count.
+static const size_t SGROUP_WORD_SIGNIFICANT_LETTERS = 3;
+
+static std::string significantLetters(const Array<char>& sgroup_word)
+{
+    return std::string(sgroup_word.ptr()).substr(0, SGROUP_WORD_SIGNIFICANT_LETTERS);
+}
 
 void MolfileLoader::_readCtab3000()
 {
@@ -445,11 +457,7 @@ void MolfileLoader::_readCtab3000()
                 }
                 else if (strcmp(prop, "CFG") == 0)
                 {
-                    strscan.readInt1();
-                    // int cfg = strscan.readInt1();
-
-                    // if (cfg == 3)
-                    //   _stereocenter_types[idx] = MoleculeStereocenters::ATOM4;
+                    _stereocenter_parities[i] = strscan.readInt1();
                 }
                 else if (strcmp(prop, "MASS") == 0)
                 {
@@ -667,6 +675,11 @@ void MolfileLoader::_readCtab3000()
         for (i = 0; i < _bonds_num; i++)
         {
             int reacting_center = 0;
+            // ENDPTS and ATTACH come in either order, so the record is turned into
+            // an attachment group only after the whole record has been read. ATTACH
+            // is optional, and a bare ENDPTS means the one-to-all form.
+            std::vector<int> endpoints;
+            int attach_type = _BOND_HAPTIC;
 
             _readMultiString(str);
             BufferScanner strscan(str.ptr());
@@ -682,8 +695,6 @@ void MolfileLoader::_readCtab3000()
                 if (order == BOND_SINGLE || order == BOND_DOUBLE || order == BOND_TRIPLE || order == BOND_AROMATIC || order == _BOND_COORDINATION ||
                     order == _BOND_HYDROGEN)
                     _mol->addBond_Silent(beg, end, order);
-                else if (order == _BOND_COORDINATION || order == _BOND_HYDROGEN)
-                    _mol->addBond_Silent(beg, end, BOND_ZERO);
                 else if (order == _BOND_SINGLE_OR_DOUBLE)
                     throw Error("'single or double' bonds are allowed only for queries");
                 else if (order == _BOND_SINGLE_OR_AROMATIC)
@@ -763,23 +774,19 @@ void MolfileLoader::_readCtab3000()
                     reacting_center = strscan.readInt1();
                 else if (strcmp(prop.ptr(), "ENDPTS") == 0)
                 {
-                    strscan.skip(1); // (
-                    n = strscan.readInt1();
-                    while (n-- > 0)
-                    {
-                        strscan.readInt();
-                        strscan.skipSpace();
-                    }
-                    strscan.skip(1); // )
+                    _readEndpoints3000(strscan, endpoints);
                 }
                 else if (strcmp(prop.ptr(), "ATTACH") == 0)
                 {
-                    while (!strscan.isEOF())
-                    {
-                        char c = strscan.readChar();
-                        if (c == ' ')
-                            break;
-                    }
+                    QS_DEF(Array<char>, attach);
+                    strscan.readWord(attach, 0);
+
+                    if (strcmp(attach.ptr(), "ALL") == 0)
+                        attach_type = _BOND_HAPTIC;
+                    else if (strcmp(attach.ptr(), "ANY") == 0)
+                        attach_type = _BOND_VARIABLE_ATTACHMENT;
+                    else
+                        throw Error("unknown ATTACH value in bond %d: %s", i + 1, attach.ptr());
                 }
                 else if (strcmp(prop.ptr(), "DISP") == 0)
                 {
@@ -795,6 +802,10 @@ void MolfileLoader::_readCtab3000()
                     throw Error("unsupported property of CTAB3000 (in BOND block): %s", prop.ptr());
                 }
             }
+
+            if (!endpoints.empty())
+                _addHapticBond3000(beg, end, endpoints, attach_type);
+
             _bmol->reaction_bond_reacting_center[i] = reacting_center;
         }
 
@@ -833,6 +844,111 @@ void MolfileLoader::_readCtab3000()
     }
 }
 
+// ENDPTS=(natoms atom1 atom2 ...): the atoms a multi-endpoint bond attaches to,
+// one-based as everywhere in the bond block. Read in file order, which is the
+// order the saver writes back.
+void MolfileLoader::_readEndpoints3000(Scanner& scanner, std::vector<int>& endpoints)
+{
+    endpoints.clear();
+
+    scanner.skipSpace();
+    if (scanner.readChar() != '(')
+        throw Error("ENDPTS must be a parenthesized list");
+
+    const int count = scanner.readInt1();
+    if (count < 1)
+        throw Error("ENDPTS lists %d atoms", count);
+
+    for (int i = 0; i < count; i++)
+    {
+        scanner.skipSpace();
+        const int atom = scanner.readInt();
+        scanner.skipSpace();
+
+        if (atom < 1 || atom > _atoms_num)
+            throw Error("ENDPTS refers to atom %d, which is outside 1..%d", atom, _atoms_num);
+
+        if (std::find(endpoints.begin(), endpoints.end(), atom - 1) != endpoints.end())
+            throw Error("ENDPTS lists atom %d twice", atom);
+
+        endpoints.push_back(atom - 1);
+    }
+
+    if (scanner.readChar() != ')')
+        throw Error("ENDPTS list of %d atoms is not closed", count);
+}
+
+// One bond record with ENDPTS becomes a bond from an attachment group to the atom at
+// the other end. The star at the group's end of a haptic record (ATTACH=ALL) is "an
+// internal phantom atom that represents the center of the pi-system" (CTfile), so it
+// leaves the structure in _postLoad. A variable attachment (ATTACH=ANY, #3731) and a
+// record with no star keep both ends, and the group remembers its end atom.
+void MolfileLoader::_addHapticBond3000(int beg, int end, const std::vector<int>& endpoints, int type)
+{
+    const auto listed = [&endpoints](int atom) { return std::find(endpoints.begin(), endpoints.end(), atom) != endpoints.end(); };
+
+    // The ends of the record are the two sides of the association, so neither of
+    // them can be one of the atoms the bond attaches to.
+    if (listed(beg) || listed(end))
+        throw Error("ENDPTS lists atom %d, which is an end of the bond itself", (listed(beg) ? beg : end) + 1);
+
+    const auto is_star = [this](int atom) { return _bmol->isPseudoAtom(atom) && strcmp(_bmol->getPseudoAtom(atom), "*") == 0; };
+
+    // The format does not say which end stands for the group. Every producer we
+    // have puts a star atom there, and puts it second when both ends could pass.
+    const int anchor = is_star(beg) && !is_star(end) ? beg : end;
+    const int attached_to = anchor == beg ? end : beg;
+
+    // A star stands for the centre of one pi-system, so a ring bonded to two metals -
+    // two records ending in the same star - attaches through one group and leaves one
+    // star behind. Only a haptic record has such a centre: the star of a variable
+    // attachment is an ordinary atom the group is anchored to.
+    const bool phantom_centre = type == _BOND_HAPTIC && is_star(anchor);
+
+    int group = -1;
+    if (phantom_centre)
+    {
+        const auto known = _haptic_star_groups.find(anchor);
+        if (known != _haptic_star_groups.end())
+        {
+            const auto same_atoms = [](std::vector<int> left, std::vector<int> right) {
+                std::sort(left.begin(), left.end());
+                std::sort(right.begin(), right.end());
+                return left == right;
+            };
+
+            if (!same_atoms(_bmol->attachment_groups.group(known->second).atoms(), endpoints))
+                throw Error("star atom %d is the centre of two different ENDPTS lists", anchor + 1);
+
+            group = known->second;
+        }
+    }
+
+    if (group < 0)
+    {
+        group = _bmol->attachment_groups.addGroup();
+        AttachmentGroup& created = _bmol->attachment_groups.group(group);
+        created.setAtoms(endpoints);
+
+        if (phantom_centre)
+        {
+            // What the phantom carries is the charge and the radical of the whole
+            // pi-system, so they go to the group before the star leaves in _postLoad.
+            // A query star without the constraint means no charge or radical, and so
+            // does a RAD the format does not define: loading is not validating.
+            const int charge = _bmol->getAtomCharge(anchor);
+            const int radical = _mol != nullptr ? _mol->getStoredRadical(anchor) : _qmol->getAtomRadical(anchor);
+            created.setCharge(charge == CHARGE_UNKNOWN ? 0 : charge);
+            created.setRadical(AttachmentGroup::isValidRadical(radical) ? radical : 0);
+            _haptic_star_groups.emplace(anchor, group);
+        }
+        else
+            created.setAnchorAtom(anchor);
+    }
+
+    _bmol->addHapticBond(HapticBond::Endpoint::group(group), HapticBond::Endpoint::atom(attached_to), type);
+}
+
 void MolfileLoader::_readSGroupsBlock3000()
 {
     QS_DEF(Array<char>, str);
@@ -843,9 +959,29 @@ void MolfileLoader::_readSGroupsBlock3000()
 
         if (strncmp(str.ptr(), "END SGROUP", 10) == 0)
             break;
-        if (STRCMP(str.ptr(), "M  V30 DEFAULT") == 0)
-            continue;
-        _readSGroup3000(str.ptr());
+        int entry_start = 0;
+        if (STRCMP(str.ptr(), "DEFAULT") == 0)
+        {
+            // The defaults are skipped, not applied; an S-group can continue the same entry
+            BufferScanner scanner(str.ptr());
+            QS_DEF(Array<char>, keyword);
+            scanner.skip(static_cast<int>(strlen("DEFAULT")));
+            scanner.skipSpace();
+            while (!scanner.isEOF() && !isdigit(static_cast<unsigned char>(scanner.lookNext())))
+            {
+                scanner.readWord(keyword, " \t=");
+                keyword.push(0);
+                if (scanner.lookNext() != '=')
+                    throw Error("DEFAULT entry: expected '=' after \"%s\"", keyword.ptr());
+                scanner.skip(1); // =
+                _skipValue3000(scanner);
+                scanner.skipSpace();
+            }
+            if (scanner.isEOF())
+                continue;
+            entry_start = static_cast<int>(scanner.tell());
+        }
+        _readSGroup3000(str.ptr() + entry_start);
     }
 
     _fillSGroupsParentIndices();
@@ -1011,6 +1147,9 @@ void MolfileLoader::_readMultiString(Array<char>& str)
 
 void MolfileLoader::_readStringInQuotes(Scanner& scanner, Array<char>* str)
 {
+    if (scanner.isEOF())
+        return;
+
     char first = scanner.readChar();
     if (first == ' ')
         return;
@@ -1101,23 +1240,22 @@ void MolfileLoader::_readRGroups3000()
                 if (strcmp(str.ptr(), "M  V30 BEGIN CTAB") == 0)
                 {
                     _scanner.seek(pos, SEEK_SET);
-                    std::unique_ptr<BaseMolecule> fragment(_bmol->neu());
+                    BaseMolecule& fragment = rgroup.fragments.push_t(BaseMolecule::poolFactoryLike(*_bmol));
 
                     MolfileLoader loader(_scanner);
-                    loader._bmol = fragment.get();
+                    loader._bmol = &fragment;
                     if (_bmol->isQueryMolecule())
                     {
-                        loader._qmol = &fragment.get()->asQueryMolecule();
+                        loader._qmol = &fragment.asQueryMolecule();
                         loader._mol = 0;
                     }
                     else
                     {
                         loader._qmol = 0;
-                        loader._mol = &fragment.get()->asMolecule();
+                        loader._mol = &fragment.asMolecule();
                     }
                     loader._readCtab3000();
                     loader._postLoad();
-                    rgroup.fragments.add(fragment.release());
                 }
                 else if (strcmp(str.ptr(), "M  V30 END RGROUP") == 0)
                     break;
@@ -1155,20 +1293,19 @@ void MolfileLoader::_readSGroup3000(const char* str)
     int ext_idx = scanner.readInt();
     scanner.skipSpace();
 
-    int idx = sgroups->addSGroup(type.ptr());
+    // An unknown type goes to addSGroup as written, so that its error names the whole word.
+    const int sgroup_type = SGroup::getType(significantLetters(type).c_str());
+    int idx = sgroup_type != -1 ? sgroups->addSGroup(sgroup_type) : sgroups->addSGroup(type.ptr());
     SGroup* sgroup = &sgroups->getSGroup(idx);
     sgroup->index = sgroup_idx;
     sgroup->ext_index = ext_idx;
 
     DataSGroup* dsg = 0;
     Superatom* sup = 0;
-    RepeatingUnit* sru = 0;
     if (sgroup->sgroup_type == SGroup::SG_TYPE_DAT)
         dsg = (DataSGroup*)sgroup;
     else if (sgroup->sgroup_type == SGroup::SG_TYPE_SUP)
         sup = (Superatom*)sgroup;
-    else if (sgroup->sgroup_type == SGroup::SG_TYPE_SRU)
-        sru = (RepeatingUnit*)sgroup;
 
     int n;
 
@@ -1224,17 +1361,14 @@ void MolfileLoader::_readSGroup3000(const char* str)
             }
             scanner.skip(1); // )
         }
-        else if (strcmp(entity.ptr(), "SUBTYPE") == 0)
+        else if (strcmp(entity.ptr(), MOLFILE_SGROUP_SUBTYPE_KEY) == 0)
         {
             QS_DEF(Array<char>, subtype);
             subtype.clear();
             scanner.readWord(subtype, 0);
-            if (strcmp(subtype.ptr(), "ALT") == 0)
-                sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_ALT;
-            else if (strcmp(subtype.ptr(), "RAN") == 0)
-                sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_RAN;
-            else if (strcmp(subtype.ptr(), "BLO") == 0)
-                sgroup->sgroup_subtype = SGroup::SG_SUBTYPE_BLO;
+            const int sgroup_subtype = SGroup::getSubtype(significantLetters(subtype).c_str());
+            if (sgroup_subtype != -1)
+                sgroup->sgroup_subtype = sgroup_subtype;
         }
         else if (strcmp(entity.ptr(), "MULT") == 0)
         {
@@ -1289,18 +1423,15 @@ void MolfileLoader::_readSGroup3000(const char* str)
             brackets[1].set(x2, y2);
             scanner.skip(1); // )
         }
-        else if (strcmp(entity.ptr(), "CONNECT") == 0)
+        else if (strcmp(entity.ptr(), MOLFILE_SGROUP_CONNECTIVITY_KEY) == 0)
         {
-            char c1 = scanner.readChar();
-            char c2 = scanner.readChar();
-
-            if (sgroup->sgroup_type == SGroup::SG_TYPE_SRU)
-            {
-                if (c1 == 'H' && c2 == 'T')
-                    ((RepeatingUnit*)sgroup)->connectivity = SGroup::HEAD_TO_TAIL;
-                else if (c1 == 'H' && c2 == 'H')
-                    ((RepeatingUnit*)sgroup)->connectivity = SGroup::HEAD_TO_HEAD;
-            }
+            QS_DEF(Array<char>, connect);
+            scanner.readWord(connect, 0);
+            _applyConnectivity(*sgroup, connect.ptr());
+        }
+        else if (strcmp(entity.ptr(), MOLFILE_SGROUP_COMPONENT_ORDER_KEY) == 0)
+        {
+            _applyComponentOrder(*sgroup, scanner.readInt());
         }
         else if (strcmp(entity.ptr(), "FIELDNAME") == 0)
         {
@@ -1325,7 +1456,7 @@ void MolfileLoader::_readSGroup3000(const char* str)
         }
         else if (strcmp(entity.ptr(), "FIELDDATA") == 0)
         {
-            _readStringInQuotes(scanner, &dsg->data);
+            _readStringInQuotes(scanner, dsg ? &dsg->data : NULL);
         }
         else if (strcmp(entity.ptr(), "QUERYTYPE") == 0)
         {
@@ -1354,12 +1485,6 @@ void MolfileLoader::_readSGroup3000(const char* str)
                 sgroup->label.push(c);
             }
             sgroup->label.push(0);
-        }
-        else if (strcmp(entity.ptr(), "COMPNO") == 0)
-        {
-            int compno = scanner.readInt();
-            if (sgroup->sgroup_type == SGroup::SG_TYPE_COM)
-                ((ComponentGroup*)sgroup)->component_count = compno;
         }
         else if (strcmp(entity.ptr(), "CLASS") == 0)
         {
@@ -1478,25 +1603,28 @@ void MolfileLoader::_readSGroup3000(const char* str)
             }
         }
         else
-        {
-            if (scanner.lookNext() == '(')
-            {
-                scanner.skip(1);
-                n = scanner.readInt1();
-                while (n-- > 0)
-                {
-                    scanner.readFloat();
-                    scanner.skipSpace();
-                }
-                scanner.skip(1); // )
-            }
-            else
-            {
-                // Unknown property that can have value in quotes: PROP="     "
-                _readStringInQuotes(scanner, NULL);
-            }
-        }
+            _skipValue3000(scanner);
         scanner.skipSpace();
+    }
+}
+
+void MolfileLoader::_skipValue3000(Scanner& scanner)
+{
+    if (scanner.lookNext() == '(')
+    {
+        scanner.skip(1);
+        int n = scanner.readInt1();
+        while (n-- > 0)
+        {
+            scanner.readFloat();
+            scanner.skipSpace();
+        }
+        scanner.skip(1); // )
+    }
+    else
+    {
+        // A value that can be in quotes: PROP="     "
+        _readStringInQuotes(scanner, NULL);
     }
 }
 
@@ -1631,11 +1759,18 @@ void MolfileLoader::_readTGroups3000()
                                     StringOutput templ_inchi_output(templ_inchi_str);
                                     MoleculeInChI templ_inchi(templ_inchi_output);
                                     auto templ_tgroup = templ.getTGroup();
-                                    templ_inchi.outputInChI(templ_tgroup->fragment->asMolecule());
+                                    AromaticityOptions a_opts;
+                                    Molecule templ_mol;
+                                    templ_mol.mergeWithMolecule(templ_tgroup->fragment->asMolecule(), nullptr);
+                                    templ_mol.aromatize(a_opts);
+                                    templ_inchi.outputInChI(templ_mol);
                                     std::string tg_inchi_str;
                                     StringOutput tg_inchi_output(tg_inchi_str);
                                     MoleculeInChI tg_inchi(tg_inchi_output);
-                                    tg_inchi.outputInChI(tgroup.fragment->asMolecule());
+                                    Molecule tg_mol;
+                                    tg_mol.mergeWithMolecule(tgroup.fragment->asMolecule(), nullptr);
+                                    tg_mol.aromatize(a_opts);
+                                    tg_inchi.outputInChI(tg_mol);
                                     if (templ_inchi_str == tg_inchi_str)
                                     {
                                         std::string tgroup_name = tgroup.tgroup_name.ptr();
@@ -1665,6 +1800,19 @@ void MolfileLoader::_readTGroups3000()
             break;
         }
     }
+}
+
+void MolfileLoader::_applyConnectivity(SGroup& sgroup, const char* connectivity_code)
+{
+    const int connectivity = SGroup::getConnectivity(connectivity_code);
+    if (connectivity != -1 && SGroup::typeHasConnectivity(sgroup.sgroup_type))
+        sgroup.connectivity = connectivity;
+}
+
+void MolfileLoader::_applyComponentOrder(SGroup& sgroup, int component_order)
+{
+    if (sgroup.sgroup_type == SGroup::SG_TYPE_COM && component_order > 0)
+        sgroup.component_order = component_order;
 }
 
 void MolfileLoader::_readSGroupDisplay(Scanner& scanner, DataSGroup& dsg)
@@ -1723,13 +1871,23 @@ void MolfileLoader::_readSGroupDisplay(Scanner& scanner, DataSGroup& dsg)
         long long cur = scanner.tell();
 
         char chars[4] = {0, 0, 0, 0};
-        scanner.readCharsFix(3, chars);
+        for (int i = 0; i < 3 && !scanner.isEOF(); i++)
+            chars[i] = scanner.readChar();
         if (strncmp(chars, "ALL", 3) == 0)
             dsg.num_chars = 0;
+        else if (well_formatted)
+        {
+            char* end;
+            long count = strtol(chars, &end, 10);
+            if (end != chars && count >= 0)
+                dsg.num_chars = static_cast<int>(count);
+        }
         else
         {
-            scanner.seek(cur, SEEK_CUR);
-            dsg.num_chars = scanner.readInt1();
+            scanner.seek(cur, SEEK_SET);
+            int count = scanner.readInt1();
+            if (count >= 0)
+                dsg.num_chars = count;
         }
 
         if (well_formatted)
@@ -1780,6 +1938,7 @@ void MolfileLoader::_readSGroupDisplay(Scanner& scanner, DataSGroup& dsg)
 
 void MolfileLoader::_init()
 {
+    _haptic_star_groups.clear();
     _hcount.clear();
     _atom_types.clear();
     _sgroup_types.clear();
@@ -1792,6 +1951,8 @@ void MolfileLoader::_init()
     _stereocenter_types.zerofill();
     _stereocenter_groups.clear_resize(_atoms_num);
     _stereocenter_groups.zerofill();
+    _stereocenter_parities.clear_resize(_atoms_num);
+    _stereocenter_parities.zerofill();
     _sensible_bond_directions.clear_resize(_bonds_num);
     _sensible_bond_directions.zerofill();
     _ignore_cistrans.clear_resize(_bonds_num);

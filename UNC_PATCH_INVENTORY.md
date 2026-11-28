@@ -268,3 +268,38 @@ The contention is uneven, and not where you would guess:
 
 `valence-mode`, the option ketcher 3.18 sends on every server call, first appears in upstream
 1.45. Nothing earlier carries it.
+
+## Supersession at 1.50.0-rc.2
+
+Measured while merging `indigo-1.50.0-rc.2` (version `1.50.0-rc.2+unc36`). Upstream 1.50 now
+implements the formulation S-groups and the COP residue in full, so most of the S-group patch is
+gone:
+
+| Patch | Outcome |
+| --- | --- |
+| COM/MON/MIX classes, `addSGroup` cases | superseded by `poolFactory` and `SGroup::component_order` |
+| COM `SNC` and `COMPNO` readers and writers | superseded by `MOLFILE_SGROUP_COMPONENT_ORDER_*` |
+| COP v2000 `M  SCN` writer | superseded: upstream writes `SCN` for every `typeHasConnectivity` type |
+| COP v2000 `M  SST` reader | superseded: upstream reads `SST`, and keeps the input connectivity on reload |
+| COP v3000 `CONNECT`/`SUBTYPE` writer | superseded by the generic v3000 writer |
+| COP arm of `_updateRepeatingUnits` | superseded: upstream computes all S-group brackets by bounding box (#4017) |
+| SDF reaction export in `indigo_api.py` | superseded by `fragmentedSdf()`, which splits a reaction into molecules |
+| KET COM/MIX `subscript` | kept: upstream reads and writes `subscript` for SRU only |
+| KET `compno` | kept as a read alias; the saver writes upstream's `componentOrder` |
+| KET `MON` type | kept: upstream's `isKetSGroupType` in `ket_keys.h` refuses MON in the KET reader and writer, so the fork ref of `formats/ket_polymer_sgroups` records `rejected-type-mon: loaded` |
+| bracket export, multi-string wrap, rg-label, gross formula, CIP, CDXML, abbreviation roles | reapplied unchanged |
+
+The ketcher fork reads `compno`. Until it moves to upstream 3.22, which reads `componentOrder`,
+a KET written by this release loses the component order in the fork's ketcher. Ship the platform
+Indigo tag together with the Ketcher 3.22 packages.
+
+The refs were regenerated from this branch's CI `indigo-python` wheel with `test.py -u`. Each
+regenerated molfile matches the merged upstream ref after three normalisations: join the V3000
+continuation lines, drop the zero-length brackets that this fork does not write, and compare numbers
+at a 1e-5 tolerance. Only the `unc_*` characterisation refs change past formatting:
+`unc_sgroup_cop_molfile` keeps the HT connectivity, `unc_sgroup_bracket_export` shows the
+bounding-box brackets of upstream #4017, and `unc_molfile_multistring_wrap` wraps one line fewer.
+
+The bracket export writes `%.8g`, which shows float noise for a coordinate that is not a binary
+fraction, for example `0.58000004` for 0.58. Fork 1.46 output showed the same noise for computed
+brackets. Its fixtures hid the noise, because the fork bracket placement produced round values.

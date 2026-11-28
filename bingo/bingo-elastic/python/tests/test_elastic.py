@@ -1,10 +1,13 @@
+import json
+import re
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Dict
 
 import pytest
 from elasticsearch import NotFoundError
+from elasticsearch.helpers import BulkIndexError
 from indigo import Indigo  # type: ignore
 
 from bingo_elastic.elastic import (
@@ -12,7 +15,7 @@ from bingo_elastic.elastic import (
     ElasticRepository,
     IndexName,
 )
-from bingo_elastic.model.helpers import iterate_file
+from bingo_elastic.model.helpers import iterate_file, iterate_sdf
 from bingo_elastic.model.record import (
     IndigoRecord,
     IndigoRecordMolecule,
@@ -21,10 +24,12 @@ from bingo_elastic.model.record import (
 )
 from bingo_elastic.queries import (
     EuclidSimilarityMatch,
+    GrossFormulaQuery,
     RangeQuery,
     TanimotoSimilarityMatch,
     TverskySimilarityMatch,
     WildcardQuery,
+    _normalize_formula,
 )
 
 AsyncRepositoryT = Callable[[], AsyncElasticRepository]
@@ -527,10 +532,263 @@ async def test_a_custom_fields(
             assert iupac_inch == "RDHQFKQIGNGIED-UHFFFAOYSA-N"
 
 
+def test_sdf_custom_properties(resource_loader):
+    custom_properties = {"n": {"type": "integer"}}
+    repo = ElasticRepository(
+        IndexName.BINGO_MOLECULE,
+        host="127.0.0.1",
+        port=9200,
+        custom_properties=custom_properties,
+    )
+    repo.delete_all_records()
+    for rec in iterate_sdf(
+        resource_loader("molecules/rand_queries_small.sdf"),
+        custom_properties=custom_properties,
+    ):
+        repo.index_record(rec)
+    time.sleep(1)
+
+    hits = list(repo.filter(n="1"))
+    assert len(hits) >= 1
+    assert hits[0].n == "1"
+
+    # The integer mapping enables a numeric range query that would silently
+    # misbehave if `n` were left as a dynamically mapped text field.
+    range_hits = list(repo.filter(n=RangeQuery(2, 4)))
+    assert {hit.n for hit in range_hits} == {"2", "3", "4"}  # type: ignore
+
+
+@pytest.mark.asyncio
+async def test_a_sdf_custom_properties(resource_loader):
+    custom_properties = {"n": {"type": "integer"}}
+
+    def make_repo():
+        return AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties=custom_properties,
+        )
+
+    async with make_repo() as rep:
+        for rec in iterate_sdf(
+            resource_loader("molecules/rand_queries_small.sdf"),
+            custom_properties=custom_properties,
+        ):
+            await rep.index_record(rec)
+        await rep.el_client.indices.refresh(
+            index=IndexName.BINGO_MOLECULE.value
+        )
+
+    async with make_repo() as rep:
+        result = rep.filter(n="1")
+        hits = [item async for item in result]
+        assert len(hits) >= 1
+        assert hits[0].n == "1"
+
+    async with make_repo() as rep:
+        result = rep.filter(n=RangeQuery(2, 4))
+        range_hits = [item async for item in result]
+        assert {hit.n for hit in range_hits} == {"2", "3", "4"}  # type: ignore
+
+
+def test_sdf_no_custom_properties_default(resource_loader):
+    repo = ElasticRepository(
+        IndexName.BINGO_MOLECULE, host="127.0.0.1", port=9200
+    )
+    repo.delete_all_records()
+    records = list(
+        iterate_sdf(resource_loader("molecules/rand_queries_small.sdf"))
+    )
+    for rec in records:
+        repo.index_record(rec)
+    time.sleep(1)
+
+    assert not any(hasattr(rec, "n") for rec in records)
+    assert list(repo.filter(n="1")) == []
+
+
+@pytest.mark.asyncio
+async def test_a_sdf_no_custom_properties_default(resource_loader):
+    def make_repo():
+        return AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE, host="127.0.0.1", port=9200
+        )
+
+    records = list(
+        iterate_sdf(resource_loader("molecules/rand_queries_small.sdf"))
+    )
+    async with make_repo() as rep:
+        for rec in records:
+            await rep.index_record(rec)
+        await rep.el_client.indices.refresh(
+            index=IndexName.BINGO_MOLECULE.value
+        )
+
+    assert not any(hasattr(rec, "n") for rec in records)
+
+    async with make_repo() as rep:
+        result = rep.filter(n="1")
+        hits = [item async for item in result]
+        assert hits == []
+
+
+def test_sdf_custom_properties_index_false(resource_loader):
+    custom_properties = {"n": {"type": "keyword", "index": False}}
+    repo = ElasticRepository(
+        IndexName.BINGO_MOLECULE,
+        host="127.0.0.1",
+        port=9200,
+        custom_properties=custom_properties,
+    )
+    repo.delete_all_records()
+    for rec in iterate_sdf(
+        resource_loader("molecules/rand_queries_small.sdf"),
+        custom_properties=custom_properties,
+    ):
+        repo.index_record(rec)
+    time.sleep(1)
+
+    # The flag reaches the live index mapping.
+    mapping = repo.el_client.indices.get_mapping(
+        index=IndexName.BINGO_MOLECULE.value
+    )
+    props = mapping[IndexName.BINGO_MOLECULE.value]["mappings"]["properties"]
+    assert props["n"]["index"] is False
+
+    # Value is still stored in _source and returned on retrieved records.
+    hits = list(repo.filter(limit=1))
+    assert len(hits) == 1
+    assert hasattr(hits[0], "n")
+
+    # But the field is not searchable: filter() rejects it before hitting ES.
+    with pytest.raises(ValueError, match="index=false"):
+        list(repo.filter(n="1"))
+
+
+@pytest.mark.asyncio
+async def test_a_sdf_custom_properties_index_false(resource_loader):
+    custom_properties = {"n": {"type": "keyword", "index": False}}
+
+    def make_repo():
+        return AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties=custom_properties,
+        )
+
+    async with make_repo() as rep:
+        for rec in iterate_sdf(
+            resource_loader("molecules/rand_queries_small.sdf"),
+            custom_properties=custom_properties,
+        ):
+            await rep.index_record(rec)
+        await rep.el_client.indices.refresh(
+            index=IndexName.BINGO_MOLECULE.value
+        )
+
+    async with make_repo() as rep:
+        mapping = await rep.el_client.indices.get_mapping(
+            index=IndexName.BINGO_MOLECULE.value
+        )
+        props = mapping[IndexName.BINGO_MOLECULE.value]["mappings"][
+            "properties"
+        ]
+        assert props["n"]["index"] is False
+
+        result = rep.filter(limit=1)
+        hits = [item async for item in result]
+        assert len(hits) == 1
+        assert hasattr(hits[0], "n")
+
+        with pytest.raises(ValueError, match="index=false"):
+            [item async for item in rep.filter(n="1")]
+
+
+def test_sdf_custom_properties_wrong_value_type(resource_loader):
+    # n is declared boolean, but the SDF values are numbers ("1", "2", ...),
+    # so Elasticsearch rejects the document at index time.
+    custom_properties = {"n": {"type": "boolean"}}
+    repo = ElasticRepository(
+        IndexName.BINGO_MOLECULE,
+        host="127.0.0.1",
+        port=9200,
+        custom_properties=custom_properties,
+    )
+    repo.delete_all_records()
+    rec = next(
+        iterate_sdf(
+            resource_loader("molecules/rand_queries_small.sdf"),
+            custom_properties=custom_properties,
+        )
+    )
+    with pytest.raises(BulkIndexError):
+        repo.index_record(rec)
+
+
+@pytest.mark.asyncio
+async def test_a_sdf_custom_properties_wrong_value_type(resource_loader):
+    custom_properties = {"n": {"type": "boolean"}}
+
+    def make_repo():
+        return AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties=custom_properties,
+        )
+
+    rec = next(
+        iterate_sdf(
+            resource_loader("molecules/rand_queries_small.sdf"),
+            custom_properties=custom_properties,
+        )
+    )
+    async with make_repo() as rep:
+        with pytest.raises(BulkIndexError):
+            await rep.index_record(rec)
+
+
+def test_custom_properties_wrong_argument_type():
+    # Not a dict-of-dicts: a bare list, and a dict with a non-dict fragment.
+    with pytest.raises(TypeError, match="custom_properties"):
+        ElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties=["n"],
+        )
+    with pytest.raises(TypeError, match="custom_properties"):
+        ElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties={"n": "integer"},
+        )
+
+
+def test_a_custom_properties_wrong_argument_type():
+    # AsyncElasticRepository.__init__ is synchronous, so no event loop needed.
+    with pytest.raises(TypeError, match="custom_properties"):
+        AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties=["n"],
+        )
+    with pytest.raises(TypeError, match="custom_properties"):
+        AsyncElasticRepository(
+            IndexName.BINGO_MOLECULE,
+            host="127.0.0.1",
+            port=9200,
+            custom_properties={"n": "integer"},
+        )
+
+
 def test_search_empty_fingerprint(
     elastic_repository_molecule: ElasticRepository,
     indigo_fixture: Indigo,
-    resource_loader,
 ):
     for smile in ["[H][H]", "[H][F]"]:
         rec = IndigoRecordMolecule(
@@ -558,7 +816,6 @@ def test_search_empty_fingerprint(
 async def test_a_search_empty_fingerprint(
     a_elastic_repository_molecule: AsyncRepositoryT,
     indigo_fixture: Indigo,
-    resource_loader,
 ):
     async with a_elastic_repository_molecule() as rep:
         for smile in ["[H][H]", "[H][F]"]:
@@ -1008,3 +1265,125 @@ async def test_a_molecule_tautomer_exact_search(
             )
         ]
     assert len(matches) == 1
+
+
+# Reference data shared with bingo/tests/test_gross
+GROSS_DATA_DIR = (
+    Path(__file__).resolve().parents[3] / "tests" / "data" / "molecules"
+) / "gross"
+
+
+def _bingo_gross_cases() -> list:
+    with open(GROSS_DATA_DIR / "std.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _skip_unloadable(_record: object, _error: BaseException) -> None:
+    """Keep unloadable reference molecules as records without a formula."""
+
+
+def _bingo_gross_records(indigo: Indigo) -> list:
+    return list(
+        iterate_sdf(
+            GROSS_DATA_DIR / "import" / "queries" / "mols.sdf",
+            error_handler=_skip_unloadable,
+            session=indigo,
+        )
+    )
+
+
+def _index_bingo_gross_reference(
+    repository: ElasticRepository, indigo: Indigo
+) -> Dict[str, int]:
+    """
+    Index the reference set and return {raw query formula: expected hits}
+    for every carbon-free formula, every formula with carbon but no
+    hydrogen, and the 10 most common formulas. Queries use the raw
+    std.json string (e.g. "C6 N5 O3 H5") so the normaliser is exercised.
+    """
+    records = _bingo_gross_records(indigo)
+    repository.index_records(record for record in records)
+    repository.el_client.indices.refresh(index=IndexName.BINGO_MOLECULE.value)
+
+    expected: Counter = Counter()
+    raw_formula: Dict[str, str] = {}
+    for case in _bingo_gross_cases():
+        if case["expected"] is None:
+            continue
+        formula = _normalize_formula(case["expected"])
+        expected[formula] += 1
+        raw_formula.setdefault(formula, case["expected"])
+
+    # Hill order puts C first only when carbon is present
+    def has_carbon(formula: str) -> bool:
+        return formula.startswith("C") and not formula[1:2].islower()
+
+    queries = {f for f in expected if not has_carbon(f)}
+    queries |= {f for f in expected if has_carbon(f) and "H" not in f}
+    queries |= {f for f, _ in expected.most_common(10)}
+    return {raw_formula[f]: expected[f] for f in sorted(queries)}
+
+
+@pytest.mark.parametrize(
+    "formula, message",
+    [
+        ("", "Unsupported gross formula"),
+        ("   ", "Unsupported gross formula"),
+        ("c2h6o", "Unsupported gross formula"),
+        ("2H2O", "Unsupported gross formula"),
+        ("(CH3)2CHOH", "Unsupported gross formula"),
+        ("C2H6O-", "Unsupported gross formula"),
+        ("C0", "contains no atoms"),
+    ],
+)
+def test_gross_formula_invalid(formula: str, message: str):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        GrossFormulaQuery(formula)
+
+
+def test_gross_formula_matches_bingo_reference(indigo_fixture: Indigo):
+    cases = _bingo_gross_cases()
+    records = _bingo_gross_records(indigo_fixture)
+    assert len(cases) == len(records)
+    for case, record in zip(cases, records):
+        if case["expected"] is None:
+            continue
+        assert (
+            _normalize_formula(case["expected"]) == record.gross_formula
+        ), case["query_id"]
+
+
+def test_gross_formula_search_bingo_reference(
+    elastic_repository_molecule: ElasticRepository,
+    indigo_fixture: Indigo,
+):
+    queries = _index_bingo_gross_reference(
+        elastic_repository_molecule, indigo_fixture
+    )
+    for formula, expected in queries.items():
+        results = list(
+            elastic_repository_molecule.filter(
+                gross_formula=GrossFormulaQuery(formula), limit=100
+            )
+        )
+        assert len(results) == expected, formula
+
+
+@pytest.mark.asyncio
+async def test_a_gross_formula_search_bingo_reference(
+    elastic_repository_molecule: ElasticRepository,
+    a_elastic_repository_molecule: AsyncRepositoryT,
+    indigo_fixture: Indigo,
+):
+    queries = _index_bingo_gross_reference(
+        elastic_repository_molecule, indigo_fixture
+    )
+    async with a_elastic_repository_molecule() as rep:
+        for formula, expected in queries.items():
+            results = [
+                r
+                async for r in rep.filter(
+                    gross_formula=GrossFormulaQuery(formula), limit=100
+                )
+            ]
+            assert len(results) == expected, formula

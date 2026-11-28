@@ -24,6 +24,8 @@
 #include "layout/molecule_layout_graph.h"
 #include "molecule/molecule.h"
 #include "molecule/query_molecule.h"
+#include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #pragma warning(push)
@@ -48,8 +50,15 @@ namespace indigo
         void updateSGroups();
 
         void setCancellationHandler(CancellationHandler* cancellation);
+        // The font of the atom labels that the S-group brackets stand outside of: the renderer's default unless the
+        // options set one
+        void setLabelOptions(const LayoutOptions& options);
 
         float bond_length;
+        float label_font_size;
+        LABEL_MODE label_mode;
+        // Group-to-atom haptic bond length, in standard bond lengths.
+        float haptic_bond_multiplier;
         std::optional<Vec2f> multiple_distance;
         bool respect_existing_layout;
         bool respect_cycles_direction;
@@ -67,7 +76,6 @@ namespace indigo
         BaseMolecule& _getMol(int id);
         void _make();
         void _makeLayout();
-        void _updateRepeatingUnits();
         void _updateMultipleGroups();
 
         static BaseMolecule& cb_getMol(int id, void* context);
@@ -76,6 +84,15 @@ namespace indigo
         void _updateDataSGroups();
 
         void _init(bool smart_layout);
+
+        // The haptic bonds between two atoms that close a ring of such bonds, as
+        // pairs of atoms of this molecule.
+        std::vector<std::pair<int, int>> _atomToAtomHapticRings() const;
+
+        // Adds those bonds to the copy being laid out as ordinary edges, so that the
+        // ordinary algorithm places them - it is the only one here that can close a
+        // ring. The rest are left to HapticLayout.
+        void _giveAtomToAtomHapticBondsToTheLayout();
 
         Metalayout _ml;
         BaseMolecule& _molecule;

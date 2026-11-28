@@ -35,6 +35,7 @@
 #include <molecule/cmf_loader.h>
 #include <molecule/cmf_saver.h>
 #include <molecule/cml_saver.h>
+#include <molecule/molecule_cdxml_loader.h>
 #include <molecule/molecule_cdxml_saver.h>
 #include <molecule/molecule_json_loader.h>
 #include <molecule/molecule_json_saver.h>
@@ -115,6 +116,65 @@ TEST_F(IndigoCoreFormatsTest, save_cdxml)
     saver.saveMolecule(t_mol);
 
     ASSERT_TRUE(out.size() > 2000);
+}
+
+// Binary CDX stores the radical as a number, CDXML by its name, and the reader
+// understands only the name: the number has to be translated on the way in.
+TEST_F(IndigoCoreFormatsTest, binary_cdx_keeps_the_radical)
+{
+    Molecule mol;
+    loadMolecule("CC", mol);
+    mol.setAtomRadical(0, RADICAL_DOUBLET);
+
+    Array<char> buffer;
+    ArrayOutput output(buffer);
+    MoleculeCdxmlSaver saver(output, true);
+    saver.saveMolecule(mol);
+
+    BufferScanner scanner(buffer);
+    ASSERT_TRUE(scanner.startsWith(kCDX_HeaderString));
+    scanner.seek(kCDX_HeaderLength, SEEK_CUR);
+    Molecule reloaded;
+    MoleculeCdxmlLoader loader(scanner, true);
+    loader.loadMolecule(reloaded);
+
+    ASSERT_EQ(2, reloaded.vertexCount());
+    EXPECT_EQ(RADICAL_DOUBLET, reloaded.getAtomRadical(0));
+    EXPECT_EQ(0, reloaded.getAtomRadical(1));
+}
+
+// The format names four radical codes. Any other number is not a radical, and the
+// atom is read without one rather than by a name looked up past the table.
+TEST_F(IndigoCoreFormatsTest, binary_cdx_reads_an_unnamed_radical_code_as_none)
+{
+    Molecule mol;
+    loadMolecule("CC", mol);
+    mol.setAtomRadical(0, RADICAL_DOUBLET);
+
+    Array<char> buffer;
+    ArrayOutput output(buffer);
+    MoleculeCdxmlSaver saver(output, true);
+    saver.saveMolecule(mol);
+
+    // A property is its tag, the length of its value and the value, little-endian.
+    const char unnamed_code = 7;
+    const std::string doublet_property = {static_cast<char>(kCDXProp_Atom_Radical & 0xFF), static_cast<char>(kCDXProp_Atom_Radical >> 8), 1, 0,
+                                          RADICAL_DOUBLET};
+    std::string document(buffer.ptr(), static_cast<std::size_t>(buffer.size()));
+    const std::size_t property_pos = document.find(doublet_property);
+    ASSERT_NE(std::string::npos, property_pos) << "the saved document has no doublet radical to replace";
+    ASSERT_EQ(std::string::npos, document.find(doublet_property, property_pos + 1)) << "and only one";
+    document[property_pos + doublet_property.size() - 1] = unnamed_code;
+
+    BufferScanner scanner(document.c_str(), static_cast<int>(document.size()));
+    ASSERT_TRUE(scanner.startsWith(kCDX_HeaderString));
+    scanner.seek(kCDX_HeaderLength, SEEK_CUR);
+    Molecule reloaded;
+    MoleculeCdxmlLoader loader(scanner, true);
+    ASSERT_NO_THROW(loader.loadMolecule(reloaded));
+
+    ASSERT_EQ(2, reloaded.vertexCount());
+    EXPECT_EQ(0, reloaded.getAtomRadical(0));
 }
 
 TEST_F(IndigoCoreFormatsTest, save_cml)
@@ -237,8 +297,7 @@ TEST_F(IndigoCoreFormatsTest, smiles_pol_sgroups_conn_and_flip)
     ASSERT_EQ(ru.atoms.at(1), 1);
     ASSERT_EQ(ru.atoms.at(2), 2);
     ASSERT_EQ(ru.atoms.at(3), 4);
-    ASSERT_TRUE(ru.connectivity.has_value());
-    ASSERT_EQ(ru.connectivity.value(), RepeatingUnit::HEAD_TO_HEAD);
+    ASSERT_EQ(ru.connectivity, RepeatingUnit::HEAD_TO_HEAD);
     Array<char> out;
     ArrayOutput std_out(out);
     SmilesSaver saver(std_out);
@@ -380,6 +439,77 @@ M  END
     ASSERT_EQ(sg.atoms.at(0), 1);
     ASSERT_EQ(sg.atoms.at(1), 3);
     ASSERT_EQ(sg.atoms.at(2), 4);
+}
+
+TEST_F(IndigoCoreFormatsTest, mol_loader_v3000_sgroup_fielddata_forms)
+{
+    const std::pair<const char*, const char*> fielddata_forms[] = {
+        {"FIELDDATA=\"a b\" LABEL=x", "a b"}, {"FIELDDATA=\"\" LABEL=x", ""}, {"FIELDDATA= LABEL=x", ""}, {"LABEL=x FIELDDATA=", ""}, {"LABEL=x", ""}};
+    auto text = [](const Array<char>& str) { return str.size() > 0 ? std::string(str.ptr()) : std::string(); };
+
+    for (const char* type : {"GEN", "SRU", "SUP", "DAT"})
+    {
+        for (const auto& [fielddata, expected] : fielddata_forms)
+        {
+            SCOPED_TRACE(std::string(type) + " " + fielddata);
+            const bool is_data = strcmp(type, "DAT") == 0;
+            std::string molfile = R"(
+  Indigo
+
+  0  0  0     0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 3 2 2 0 0
+M  V30 BEGIN ATOM
+M  V30 1 C 0 0 0 0
+M  V30 2 C 1 0.5 0 0
+M  V30 3 O 2 0 0 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 2 1 2 3
+M  V30 END BOND
+M  V30 BEGIN SGROUP
+M  V30 1 TYPE 0 ATOMS=(2 1 2) KEYS
+M  V30 2 DAT 0 ATOMS=(1 3) FIELDNAME=name FIELDDATA=kept
+M  V30 END SGROUP
+M  V30 END CTAB
+M  END
+)";
+            molfile.replace(molfile.find("TYPE"), 4, type);
+            molfile.replace(molfile.find("KEYS"), 4, std::string(is_data ? "FIELDNAME=f " : "") + fielddata);
+            Molecule mol;
+            loadMolecule(molfile.c_str(), mol);
+
+            ASSERT_EQ(2, mol.sgroups.getSGroupCount());
+            SGroup& sg = mol.sgroups.getSGroup(0);
+            EXPECT_STREQ(type, SGroup::typeToString(sg.sgroup_type));
+            ASSERT_EQ(2, sg.atoms.size());
+            EXPECT_EQ(0, sg.atoms[0]);
+            EXPECT_EQ(1, sg.atoms[1]);
+            EXPECT_STREQ("x", sg.label.ptr());
+            if (is_data)
+                EXPECT_EQ(expected, text(static_cast<DataSGroup&>(sg).data));
+
+            SGroup& next = mol.sgroups.getSGroup(1);
+            ASSERT_EQ(SGroup::SG_TYPE_DAT, next.sgroup_type);
+            EXPECT_EQ("kept", text(static_cast<DataSGroup&>(next).data));
+
+            Array<char> out;
+            ArrayOutput std_out(out);
+            MolfileSaver saver(std_out);
+            saver.mode = MolfileSaver::MODE_3000;
+            saver.saveMolecule(mol);
+            out.push(0);
+
+            Molecule reloaded;
+            loadMolecule(out.ptr(), reloaded);
+            ASSERT_EQ(2, reloaded.sgroups.getSGroupCount());
+            EXPECT_EQ(sg.sgroup_type, reloaded.sgroups.getSGroup(0).sgroup_type);
+            if (is_data)
+                EXPECT_EQ(expected, text(static_cast<DataSGroup&>(reloaded.sgroups.getSGroup(0)).data));
+            EXPECT_EQ("kept", text(static_cast<DataSGroup&>(reloaded.sgroups.getSGroup(1)).data));
+        }
+    }
 }
 
 TEST_F(IndigoCoreFormatsTest, mol_saver_nested_sgroups_parent_order)

@@ -181,6 +181,11 @@ public:
         JSON_REACTION,
         MONOMER_LIBRARY,
         KET_DOCUMENT,
+        ATTACHMENT_GROUP,
+        ATTACHMENT_GROUPS_ITER,
+        ATTACHMENT_GROUP_ATOMS_ITER,
+        HAPTIC_BOND,
+        HAPTIC_BONDS_ITER,
         INDIGO_OBJECT_LAST_TYPE // must be the last element in the enum
     };
 
@@ -402,6 +407,8 @@ public:
     static void handleError(const char* message);
     static void setErrorHandler(INDIGO_ERROR_HANDLER handler, void* context);
     auto getAbbreviations() -> const abbreviations::IndigoAbbreviations&;
+    void loadAbbreviations(const char* xml_text);
+    void resetAbbreviations();
 
 private:
     static Array<char>& error_message();
