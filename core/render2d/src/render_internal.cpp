@@ -650,6 +650,25 @@ void MoleculeRenderInternal::_initSGroups(Tree& sgroups, Rect2f parent)
             parent = ILLEGAL_RECT();
         }
 
+        if (sgroup.sgroup_type == SGroup::SG_TYPE_COM || sgroup.sgroup_type == SGroup::SG_TYPE_MIX)
+        {
+            Sgroup& sg = _data.sgroups.push();
+            _loadBracketsAuto(sgroup, sg);
+            int tiIndex = _pushTextItem(sg, RenderItem::RIT_SGROUP);
+            TextItem& index = _data.textitems[tiIndex];
+            index.fontsize = FONT_SIZE_ATTR;
+            if (sgroup.label.size() > 0 && sgroup.label[0] != 0)
+                bprintf(index.text, "%s", sgroup.label.ptr());
+            else if (sgroup.sgroup_type == SGroup::SG_TYPE_MIX)
+                bprintf(index.text, "mix");
+            else if (((ComponentGroup&)sgroup).component_count > 0)
+                bprintf(index.text, "c%d", ((ComponentGroup&)sgroup).component_count);
+            else
+                bprintf(index.text, "c");
+            _positionIndex(sg, tiIndex, true);
+            parent = ILLEGAL_RECT();
+        }
+
         if (sgroup.sgroup_type == SGroup::SG_TYPE_MUL)
         {
             const MultipleGroup& group = (MultipleGroup&)sgroup;
