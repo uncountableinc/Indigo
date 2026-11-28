@@ -29,27 +29,33 @@ indigo = Indigo()
 indigo.setOption("molfile-saving-mode", "3000")
 indigo.setOption("molfile-saving-skip-date", True)
 
-MOLFILE = """bracket-export
-  Indigo
-
-  3  2  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  2  3  1  0  0  0  0
-M  STY  1   1 SRU
-M  SAL   1  3   1   2   3
-M  SCN  1   1 HT
-M  SMT   1 n
-M  SDI   1  4   -0.5000   -0.5000   -0.5000    0.5000
-M  SDI   1  4    2.5000    0.5000    2.5000   -0.5000
-M  END
-"""
+SRU = """{
+  "root": { "nodes": [ { "$ref": "mol0" } ] },
+  "mol0": {
+    "type": "molecule",
+    "atoms": [
+      { "label": "C", "location": [0.0, 0.0, 0.0] },
+      { "label": "C", "location": [1.0, 0.0, 0.0] },
+      { "label": "C", "location": [2.0, 0.0, 0.0] }
+    ],
+    "bonds": [
+      { "type": 1, "atoms": [0, 1] },
+      { "type": 1, "atoms": [1, 2] }
+    ],
+    "sgroups": [
+      {
+        "type": "SRU",
+        "atoms": [0, 1, 2],
+        "subscript": "n",
+        "connectivity": "HT"
+      }
+    ]
+  }
+}"""
 
 print("*** V3000 s-group bracket export ***")
 
-mol = indigo.loadMolecule(MOLFILE)
+mol = indigo.loadMolecule(SRU)
 for line in mol.molfile().splitlines():
     if "SRU" in line or "BRKXYZ" in line:
         print(line.rstrip())

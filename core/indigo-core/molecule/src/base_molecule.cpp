@@ -301,10 +301,6 @@ void BaseMolecule::mergeSGroupsWithSubmolecule(BaseMolecule& mol, Array<int>& ma
                     if (mapping[supermg.parent_atoms[j]] >= 0)
                         mg.parent_atoms.push(mapping[supermg.parent_atoms[j]]);
             }
-            else if (sg.sgroup_type == SGroup::SG_TYPE_COM)
-            {
-                sg.component_order = supersg.component_order;
-            }
         }
         else
         {

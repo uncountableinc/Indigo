@@ -1267,38 +1267,6 @@ void MolfileLoader::_readCtab2000()
                         _applyComponentOrder(_bmol->sgroups.getSGroup(_sgroup_mapping[entry.sgroup_idx]), component_order);
                 }
             }
-            else if (strncmp(chars, "SNC", 3) == 0)
-            {
-                // The format is the following: M SNCnn8 sss ooo ...
-                int n = _scanner.readIntFix(3);
-
-                bool need_skip_line = true;
-                while (n-- > 0)
-                {
-                    _scanner.skip(1);
-                    int sgroup_idx = _scanner.readIntFix(3) - 1;
-
-                    char id[4];
-                    _scanner.skip(1);
-                    _scanner.readCharsFix(3, id);
-
-                    if (_sgroup_types[sgroup_idx] == SGroup::SG_TYPE_COM)
-                    {
-                        _bmol->sgroups.getSGroup(_sgroup_mapping[sgroup_idx]).component_order = _scanner.readIntFix(3);
-
-                        if (id[2] == '\n')
-                        {
-                            if (n != 0)
-                                throw Error("Unexpected end of M SNC");
-                            else
-                                // In some molfiles last space is not written
-                                need_skip_line = false;
-                        }
-                    }
-                }
-                if (need_skip_line)
-                    _scanner.skipLine();
-            }
             else if (strncmp(chars, "MRV", 3) == 0)
             {
                 _scanner.readLine(str, false);

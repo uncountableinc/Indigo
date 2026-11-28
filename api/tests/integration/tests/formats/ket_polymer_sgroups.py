@@ -84,7 +84,7 @@ for filename in [
         indigo.loadMoleculeFromFile(path(filename + ".ket")), filename
     )
 
-print("*** Input validation ***")
+print("*** Input that is rejected ***")
 for filename, load in [
     ("rejected-type-lowercase", indigo.loadMoleculeFromFile),
     ("rejected-type-mon", indigo.loadMoleculeFromFile),

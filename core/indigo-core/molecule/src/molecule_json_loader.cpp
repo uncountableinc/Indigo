@@ -1517,8 +1517,10 @@ void MoleculeJsonLoader::parseSGroups(const rapidjson::Value& sgroups, BaseMolec
         case SGroup::SG_TYPE_COM:
             if (s.HasMember(KetKeyComponentOrder))
                 sgroup.component_order = s[KetKeyComponentOrder].GetInt();
-            else if (s.HasMember("compno"))
+            // unc: KET written by fork releases before 1.50 stores the component order as "compno"
+            else if (s.HasMember("compno") && s["compno"].IsInt() && s["compno"].GetInt() > 0)
                 sgroup.component_order = s["compno"].GetInt();
+            // unc: upstream reads no subscript for formulation components and mixtures
             if (s.HasMember("subscript"))
                 sgroup.label.readString(s["subscript"].GetString(), true);
             break;

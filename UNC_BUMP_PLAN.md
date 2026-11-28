@@ -30,7 +30,8 @@ The merge uses the fork history through `06d2c375d` and the true common ancestor
 `a5e9b6cd478644cd908fca1f736a564bedba73c1`. The history-aware merge preserves the fork commits
 before it applies `indigo-1.50.0-rc.2`.
 
-The fork release identity is `1.50.0+unc36`, with the planned tag `indigo-1.50.0-unc36`.
+The fork release identity is `1.50.0-rc.2+unc36` (Python `1.50.0rc2+unc36`), with the planned tag
+`indigo-1.50.0-rc.2-unc36`.
 The release keeps the `epam.indigo` Python distribution name and the fork CI, service environment,
 and private release behavior.
 
@@ -40,11 +41,15 @@ component order. The merge removes the obsolete `MonomerGroup`, `ComponentGroup`
 fields at the JSON boundary.
 
 The merge retains the fork patches for CDXML label styling and collapsed geometry, CIP R/S and
-axial descriptors, abbreviation roles, SDF reaction export, rg-label loading, gross-formula reset,
-and multi-string wrapping. It retains the fork's golden files until CI regenerates the outputs.
+axial descriptors, abbreviation roles, rg-label loading, gross-formula reset, and multi-string
+wrapping. Upstream `fragmentedSdf()` supersedes the fork SDF reaction export: it splits a reaction
+into molecules, as the fork patch did. The integration refs are regenerated from the CI wheel.
 
-The sections below record the prior 1.46 bump. Do not reuse its version, tag, file counts, or
-supersession conclusions for a later bump.
+The ketcher fork still reads `compno`, and the saver now writes upstream's `componentOrder`. The
+ketcher fork loses component order until it moves to Ketcher 3.22.
+
+The Historical sections below record the prior 1.46 bump. Do not reuse its version, tag, file
+counts, or supersession conclusions for a later bump. Phases 4 and 5 remain the release procedure.
 
 ## Historical Phase 0 — cover the untested patches
 
@@ -158,7 +163,7 @@ added between 1.34 and 1.46 will fail on formatting alone. Regenerate through th
 writer and diff numerically — a regenerated golden can hide a real behaviour change just as easily
 as it can absorb a formatting one. This exact mismatch broke the previous bump.
 
-## Historical Phase 4 — release
+## Phase 4 — release
 
 ### How a release happens
 
@@ -218,7 +223,7 @@ Every filename must carry the version just tagged, and there must be three: `mac
 soon as it is published — which is how a local/production mismatch appears without anyone changing
 anything. Expect local setups to jump to 1.46 the moment this release publishes, ahead of Phase 5.
 
-## Historical Phase 5 — move the platform
+## Phase 5 — move the platform
 
 Three pins move together, in one change:
 

@@ -7,25 +7,6 @@ The fork's history is squashed: `5da8a5b03` collapses 57 commits into one, and i
 only some of what it carries. The per-patch history survives on `joe/bump-indigo-1.34.0`, and four
 more patches landed on `master` after the squash. This file is the reconciled result.
 
-The historical inventory below describes the fork delta from `indigo-1.34.0` through 1.46.
-The current fork base is `1.46.0+unc35`, and the current target is `indigo-1.50.0-rc.2`.
-
-## Current 1.50 merge result
-
-The fork release is `1.50.0+unc36`, with the planned tag `indigo-1.50.0-unc36`. The merge uses
-the fork history through `06d2c375d` and common ancestor `a5e9b6cd478644cd908fca1f736a564bedba73c1`.
-
-Upstream 1.50 replaces the old formulation S-group subclasses with generic `SGroup` fields. The
-merge therefore removes `MonomerGroup`, `ComponentGroup`, and `MixtureGroup`, and moves component
-order to `SGroup::component_order`. The JSON loader still accepts the fork's `compno` and
-`subscript` fields, while the saver writes the canonical generic component order and label fields.
-Upstream generic connectivity handling replaces the old explicit COP and COM molfile writer paths.
-
-The merge keeps the fork patches for CDXML labels and geometry, CIP descriptors and automorphism,
-reaction abbreviation roles, SDF reaction export, rg-label loading, gross-formula isotope reset,
-multi-string wrapping, release metadata, and CI service behavior. Check those patches against this
-inventory after each future upstream merge.
-
 Base: `indigo-1.34.0`. Fork delta: 41 commits, 107 files, 0 behind.
 
 ## How to use this during a bump
@@ -46,7 +27,7 @@ how the `SST` claim below was caught and corrected.
 
 ## The patches
 
-The historical collision table is against `indigo-1.34.0..indigo-1.46.0`.
+Collisions are against `indigo-1.34.0..indigo-1.46.0`.
 
 | Patch | Source files | Colliding | Tests |
 | --- | --- | --- | --- |
@@ -120,7 +101,7 @@ The four integration tests follow the repository's golden-output convention, wit
 `utils/indigo-service/backend/service/tests/api/indigo_test.py` and runs against a running
 container, as CI already does.
 
-## Historical supersession, as measured against 1.46
+## Supersession, as measured against 1.46
 
 Upstream 1.46 declares `SG_TYPE_MON`, `SG_TYPE_COP`, `SG_TYPE_COM` and `SG_TYPE_MIX` in the enum,
 which reads like it implements all four. It does not. Checked per patch:
@@ -287,3 +268,38 @@ The contention is uneven, and not where you would guess:
 
 `valence-mode`, the option ketcher 3.18 sends on every server call, first appears in upstream
 1.45. Nothing earlier carries it.
+
+## Supersession at 1.50.0-rc.2
+
+Measured while merging `indigo-1.50.0-rc.2` (version `1.50.0-rc.2+unc36`). Upstream 1.50 now
+implements the formulation S-groups and the COP residue in full, so most of the S-group patch is
+gone:
+
+| Patch | Outcome |
+| --- | --- |
+| COM/MON/MIX classes, `addSGroup` cases | superseded by `poolFactory` and `SGroup::component_order` |
+| COM `SNC` and `COMPNO` readers and writers | superseded by `MOLFILE_SGROUP_COMPONENT_ORDER_*` |
+| COP v2000 `M  SCN` writer | superseded: upstream writes `SCN` for every `typeHasConnectivity` type |
+| COP v2000 `M  SST` reader | superseded: upstream reads `SST`, and keeps the input connectivity on reload |
+| COP v3000 `CONNECT`/`SUBTYPE` writer | superseded by the generic v3000 writer |
+| COP arm of `_updateRepeatingUnits` | superseded: upstream computes all S-group brackets by bounding box (#4017) |
+| SDF reaction export in `indigo_api.py` | superseded by `fragmentedSdf()`, which splits a reaction into molecules |
+| KET COM/MIX `subscript` | kept: upstream reads and writes `subscript` for SRU only |
+| KET `compno` | kept as a read alias; the saver writes upstream's `componentOrder` |
+| KET `MON` type | kept: upstream's `isKetSGroupType` in `ket_keys.h` refuses MON in the KET reader and writer, so the fork ref of `formats/ket_polymer_sgroups` records `rejected-type-mon: loaded` |
+| bracket export, multi-string wrap, rg-label, gross formula, CIP, CDXML, abbreviation roles | reapplied unchanged |
+
+The ketcher fork reads `compno`. Until it moves to upstream 3.22, which reads `componentOrder`,
+a KET written by this release loses the component order in the fork's ketcher. Ship the platform
+Indigo tag together with the Ketcher 3.22 packages.
+
+The refs were regenerated from this branch's CI `indigo-python` wheel with `test.py -u`. Each
+regenerated molfile matches the merged upstream ref after three normalisations: join the V3000
+continuation lines, drop the zero-length brackets that this fork does not write, and compare numbers
+at a 1e-5 tolerance. Only the `unc_*` characterisation refs change past formatting:
+`unc_sgroup_cop_molfile` keeps the HT connectivity, `unc_sgroup_bracket_export` shows the
+bounding-box brackets of upstream #4017, and `unc_molfile_multistring_wrap` wraps one line fewer.
+
+The bracket export writes `%.8g`, which shows float noise for a coordinate that is not a binary
+fraction, for example `0.58000004` for 0.58. Fork 1.46 output showed the same noise for computed
+brackets. Its fixtures hid the noise, because the fork bracket placement produced round values.

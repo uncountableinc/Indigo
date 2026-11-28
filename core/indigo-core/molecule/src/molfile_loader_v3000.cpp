@@ -1486,12 +1486,6 @@ void MolfileLoader::_readSGroup3000(const char* str)
             }
             sgroup->label.push(0);
         }
-        else if (strcmp(entity.ptr(), "COMPNO") == 0)
-        {
-            int compno = scanner.readInt();
-            if (sgroup->sgroup_type == SGroup::SG_TYPE_COM)
-                sgroup->component_order = compno;
-        }
         else if (strcmp(entity.ptr(), "CLASS") == 0)
         {
             while (!scanner.isEOF())

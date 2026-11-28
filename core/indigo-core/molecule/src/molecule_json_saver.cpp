@@ -353,6 +353,7 @@ void MoleculeJsonSaver::saveSGroup(SGroup& sgroup, JsonWriter& writer, int id, i
             writer.Key(KetKeyComponentOrder);
             writer.Int(sgroup.component_order);
         }
+        // unc: upstream writes no subscript for formulation components and mixtures
         if (sgroup.label.size())
         {
             writer.Key("subscript");

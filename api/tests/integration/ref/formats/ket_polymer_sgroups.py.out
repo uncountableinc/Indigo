@@ -35,7 +35,7 @@ rgroup-fragment-without-parent-ids-2000.mol:SUCCEED
 rgroup-fragment-without-parent-ids-3000.mol:SUCCEED
 rgroup-fragments-name-the-parent-2000.mol:SUCCEED
 rgroup-fragments-name-the-parent-3000.mol:SUCCEED
-*** Input validation ***
+*** Input that is rejected ***
 rejected-type-lowercase: molecule json loader: S-group #0 of molecule #0 has type 'sru', which is not a KET S-group type
 rejected-type-mon: loaded
 rejected-type-not-string: molecule json loader: S-group #0 of molecule #0 has no 'type' string
